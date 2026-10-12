@@ -1,0 +1,37 @@
+{
+  "name": "pos-system",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "packageManager": "pnpm@10.34.6",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "pnpm --parallel --filter @pos/api --filter @pos/web dev",
+    "dev:api": "pnpm --filter @pos/api dev",
+    "dev:web": "pnpm --filter @pos/web dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "pnpm -r test",
+    "db:generate": "pnpm --filter @pos/api db:generate",
+    "db:init": "pnpm --filter @pos/api db:init",
+    "db:migrate": "pnpm --filter @pos/api db:migrate",
+    "db:deploy": "pnpm --filter @pos/api db:deploy",
+    "db:seed": "pnpm --filter @pos/api db:seed",
+    "db:studio": "pnpm --filter @pos/api db:studio"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.12.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.7",
+    "globals": "^17.13.0",
+    "prettier": "^3.9.10",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.71.1"
+  }
+}

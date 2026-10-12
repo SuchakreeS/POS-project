@@ -1,0 +1,334 @@
+// =====================================================================
+// POS System — Phase 1 schema
+// Rules: money = integer satang (100 THB = 10000), IDs = UUID,
+// sales are never hard-deleted, audit log is append-only.
+// =====================================================================
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "esm"
+}
+
+// Prisma 7: the connection URL lives in prisma.config.ts, not here.
+// On Prisma 6, add back: url = env("DATABASE_URL")
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------
+
+enum Role {
+  ADMIN   // everything a cashier can do + users and settings
+  CASHIER // runs the shop: sales, void, products, stock, credit, reports
+}
+
+enum PaymentMethod {
+  CASH
+  PROMPTPAY
+  CREDIT // เงินเชื่อ
+}
+
+// PromptPay uses one printed shop QR (no amount in the QR).
+// Staff checks the bank app later and marks the bill as received.
+enum PromptpayStatus {
+  PENDING  // customer says they paid, not checked yet
+  RECEIVED // staff checked the bank app and confirmed
+}
+
+enum OrderStatus {
+  COMPLETED
+  VOIDED
+}
+
+enum DiscountType {
+  FIXED   // Phase 1: THB amount typed in by the cashier
+  PERCENT // Reserved for later (value stored as basis points, 10% = 1000)
+}
+
+enum StockMovementType {
+  INITIAL     // positive qty, starting stock when a product is created (once per product)
+  SALE        // negative qty, created at checkout
+  RESTOCK     // positive qty, "refill"
+  ADJUST      // + or -, manual correction (damage, lost, recount)
+  VOID_RETURN // positive qty, stock put back when a bill is voided
+}
+
+enum CreditEntryType {
+  CHARGE      // customer took goods on credit (owes more)
+  REPAYMENT   // customer paid back (owes less) — money received
+  CHARGE_VOID // credit bill was voided (owes less) — NOT money received
+}
+
+// How a credit repayment was paid (set only on REPAYMENT entries)
+enum RepaymentMethod {
+  CASH
+  PROMPTPAY
+}
+
+enum ReportType {
+  AUTO   // scheduled job, sent to LINE
+  MANUAL // generated on demand by a user
+}
+
+// ---------------------------------------------------------------------
+// Users & terminals
+// ---------------------------------------------------------------------
+
+model User {
+  id           String   @id @default(uuid())
+  username     String   @unique
+  passwordHash String
+  displayName  String
+  role         Role     @default(CASHIER)
+  isActive     Boolean  @default(true)
+  lastLoginAt  DateTime? // shown on the Users page
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  ordersCreated     Order[]         @relation("OrderCashier")
+  ordersVoided      Order[]         @relation("OrderVoidedBy")
+  promptpayReceipts Order[]         @relation("OrderPromptpayReceivedBy")
+  stockMovements    StockMovement[]
+  creditEntries     CreditEntry[]
+  reportsGenerated  DailyReport[]
+}
+
+model Terminal {
+  id          String   @id @default(uuid())
+  code        String   @unique // "T1", used as bill number prefix
+  name        String
+  lastBillSeq Int      @default(0) // increment inside the sale transaction
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  orders Order[]
+}
+
+// ---------------------------------------------------------------------
+// Catalog & inventory
+// ---------------------------------------------------------------------
+
+model Category {
+  id        String    @id @default(uuid())
+  name      String    @unique
+  createdAt DateTime  @default(now())
+  products  Product[]
+}
+
+model Product {
+  id         String    @id @default(uuid())
+  sku        String?   @unique
+  barcode    String?   @unique
+  name       String
+  categoryId String?
+  category   Category? @relation(fields: [categoryId], references: [id])
+
+  price      Int  // selling price, satang
+  cost       Int? // cost price, satang (optional, used for profit in reports)
+
+  // Cached current stock. Always updated in the SAME transaction as a
+  // StockMovement row, so sum(movements.qty) == stockQty.
+  stockQty   Int  @default(0)
+  lowStockAt Int? // alert threshold
+
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  movements  StockMovement[]
+  orderItems OrderItem[]
+
+  @@index([name])
+}
+
+model StockMovement {
+  id        String            @id @default(uuid())
+  productId String
+  product   Product           @relation(fields: [productId], references: [id])
+  type      StockMovementType
+  qty       Int               // signed: -2 for a sale of 2, +24 for a restock
+  reason    String?           // required by the API for ADJUST
+  orderId   String?
+  order     Order?            @relation(fields: [orderId], references: [id])
+  userId    String
+  user      User              @relation(fields: [userId], references: [id])
+  createdAt DateTime          @default(now())
+
+  @@index([productId, createdAt])
+  @@index([type, createdAt])
+}
+
+// ---------------------------------------------------------------------
+// Sales
+// ---------------------------------------------------------------------
+
+model Order {
+  id             String      @id @default(uuid())
+  billNo         String      @unique // "T1-000001"
+  idempotencyKey String      @unique // sent by the client, stops double bills
+  status         OrderStatus @default(COMPLETED)
+
+  terminalId String
+  terminal   Terminal @relation(fields: [terminalId], references: [id])
+  cashierId  String
+  cashier    User     @relation("OrderCashier", fields: [cashierId], references: [id])
+
+  subtotal       Int           // sum of line totals, satang
+  discountType   DiscountType?
+  discountValue  Int           @default(0) // what the cashier typed in
+  discountAmount Int           @default(0) // what was actually applied: min(discountValue, subtotal)
+  total          Int           // subtotal - discountAmount, never below 0
+
+  paymentMethod PaymentMethod // Phase 1: one method per bill
+  cashReceived  Int?          // CASH only
+  changeGiven   Int?          // CASH only
+
+  // PROMPTPAY only: created as PENDING at checkout, marked RECEIVED later
+  // after staff checks the bank app. Null for CASH and CREDIT.
+  promptpayStatus       PromptpayStatus?
+  promptpayReceivedById String?
+  promptpayReceivedBy   User?            @relation("OrderPromptpayReceivedBy", fields: [promptpayReceivedById], references: [id])
+  promptpayReceivedAt   DateTime?
+
+  note String?
+
+  voidReason String?
+  voidedById String?
+  voidedBy   User?     @relation("OrderVoidedBy", fields: [voidedById], references: [id])
+  voidedAt   DateTime?
+
+  clientCreatedAt DateTime // device clock (needed for offline later)
+  createdAt       DateTime @default(now()) // server clock
+
+  items          OrderItem[]
+  stockMovements StockMovement[]
+  creditEntries  CreditEntry[] // CHARGE at checkout, CHARGE_VOID if voided
+
+  @@index([createdAt])
+  @@index([paymentMethod, createdAt])
+  @@index([promptpayStatus, createdAt])
+  @@index([status, createdAt])
+}
+
+model OrderItem {
+  id          String  @id @default(uuid())
+  orderId     String
+  order       Order   @relation(fields: [orderId], references: [id])
+  productId   String
+  product     Product @relation(fields: [productId], references: [id])
+
+  // Snapshots so old bills never change when the product is edited
+  productName String
+  unitPrice   Int // satang
+  qty         Int
+  lineTotal   Int // unitPrice * qty
+
+  @@index([orderId])
+  @@index([productId])
+}
+
+// ---------------------------------------------------------------------
+// Credit (เงินเชื่อ)
+// Balance per customer = sum(CHARGE) - sum(REPAYMENT) - sum(CHARGE_VOID)
+// Money received from credit = sum(REPAYMENT) only
+// ---------------------------------------------------------------------
+
+model Customer {
+  id        String   @id @default(uuid())
+  name      String   // as typed / displayed
+  nameKey   String   @unique // trimmed + lowercased, stops "Somchai" vs "somchai " duplicates
+  phone     String?
+  note      String?
+  createdAt DateTime @default(now())
+
+  creditEntries CreditEntry[]
+}
+
+model CreditEntry {
+  id         String          @id @default(uuid())
+  customerId String
+  customer   Customer        @relation(fields: [customerId], references: [id])
+  type       CreditEntryType
+  amount     Int             // always positive, satang; type decides the sign
+  method     RepaymentMethod? // REPAYMENT only: how the customer paid
+  orderId    String?         // set for CHARGE (checkout) and CHARGE_VOID (void)
+  order      Order?          @relation(fields: [orderId], references: [id])
+  note       String?
+  userId     String
+  user       User            @relation(fields: [userId], references: [id])
+  createdAt  DateTime        @default(now())
+
+  @@unique([orderId, type]) // one CHARGE and at most one CHARGE_VOID per order
+  @@index([customerId, createdAt])
+  @@index([type, createdAt])
+}
+
+// ---------------------------------------------------------------------
+// Reports
+// ---------------------------------------------------------------------
+
+model DailyReport {
+  id            String     @id @default(uuid())
+  type          ReportType
+  periodStart   DateTime
+  periodEnd     DateTime
+  data          Json       // frozen snapshot of the numbers at generation time
+  generatedById String?    // null for AUTO
+  generatedBy   User?      @relation(fields: [generatedById], references: [id])
+
+  sentToLineAt  DateTime?
+  lineError     String?    // last send error, so failed sends can be retried
+
+  createdAt     DateTime   @default(now())
+
+  @@index([periodStart])
+  @@index([type, periodStart])
+}
+
+// ---------------------------------------------------------------------
+// Shop settings (single row, id = 1). Edited on the Settings page.
+// Secrets (LINE token, group id) stay in env vars, never here.
+// ---------------------------------------------------------------------
+
+model ShopSetting {
+  id                Int      @id @default(1)
+  shopName          String   @default("My Shop")
+  shopPhone         String?
+  reportTime        String   @default("22:00") // "HH:mm", Asia/Bangkok
+  sendReportToLine  Boolean  @default(true)
+  defaultLowStockAt Int      @default(5)        // pre-fills Add new item
+  updatedAt         DateTime @updatedAt
+}
+
+// ---------------------------------------------------------------------
+// Audit log (written from day one, no UI in Phase 1)
+// Append-only: no update/delete endpoints, revoke UPDATE/DELETE in DB.
+// ---------------------------------------------------------------------
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  createdAt  DateTime @default(now())
+
+  userId     String?
+  userName   String   // snapshot
+  role       String   // snapshot
+  terminalId String?
+
+  action     String   // fixed list in code, e.g. "ORDER_VOID", "DISCOUNT_APPLIED"
+  entityType String   // "Order", "Product", "CreditEntry", ...
+  entityId   String?
+
+  before     Json?
+  after      Json?
+  reason     String?
+  ip         String?
+  userAgent  String?
+
+  @@index([createdAt])
+  @@index([userId, createdAt])
+  @@index([entityType, entityId])
+  @@index([action, createdAt])
+}
