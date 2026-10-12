@@ -869,7 +869,9 @@ Use the same token names for Figma color variables so design and code match.
   - [x] API: login / refresh (rotating) / logout / me, `Session` table, rate limit, client-header guard, error format `{ error: { code, message } }`, audit LOGIN / LOGIN_FAILED / LOGOUT. Unit + Supertest + DB integration tests.
   - [x] Web: API client with refresh-and-retry, auth store, route guards, Login page, right sidebar layout, Session expired dialog, No permission page, placeholder pages, setup check moved to `/setup`.
   - [x] `pnpm db:migrate` now adds row level security to new tables by itself.
-- [ ] **3. Shared package**: money utils, discount calc, Zod schemas, with unit tests
+- [x] **3. Shared package**: money utils, discount calc, Zod schemas, with unit tests
+  - [x] `money.ts`: satang helpers, `parseThb` for typed amounts (string-based, no float rounding), formatting. `pricing.ts`: `calculateBill` (discount capped at subtotal), `calculateCash` (change / short), satang + qty + discount schemas. `time.ts`: Bangkok day keys and day ranges for reports and filters.
+  - Feature schemas (product, restock, checkout, ...) are added to `packages/shared` in the step that builds each feature, next to its API.
 - [ ] **4. Products + categories**: API, barcode lookup, Stock page list + Add/Edit item dialogs (standalone components)
 - [ ] **5. Inventory**: batch restock modal, adjust, movements, low stock
 - [ ] **6. Checkout + cash**: cart store, checkout transaction, idempotency, bill numbers, audit log

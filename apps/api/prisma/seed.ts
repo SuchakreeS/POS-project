@@ -8,6 +8,7 @@
  * Sample products are only added when the product table is empty.
  */
 import "dotenv/config";
+import { toSatang } from "@pos/shared";
 import bcrypt from "bcryptjs";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../src/generated/prisma/client";
@@ -16,8 +17,6 @@ const url = process.env.DIRECT_URL ?? process.env.DATABASE_URL;
 if (!url) throw new Error("Set DIRECT_URL (or DATABASE_URL) in apps/api/.env first.");
 
 const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: url }) });
-
-const thb = (amount: number) => Math.round(amount * 100); // THB → satang
 
 async function main() {
   // 1) Shop settings (single row, id = 1)
@@ -136,8 +135,8 @@ async function main() {
             sku: p.sku,
             barcode: p.barcode,
             categoryId: cat[p.category],
-            price: thb(p.price),
-            cost: thb(p.cost),
+            price: toSatang(p.price),
+            cost: toSatang(p.cost),
             stockQty: p.stock,
             lowStockAt: 5,
           },
