@@ -1,25 +1,35 @@
 import { IconX } from "@tabler/icons-react";
 import { clsx } from "clsx";
-import { useEffect, useId, useRef, type FormEvent, type ReactNode } from "react";
+import { Dialog as RadixDialog } from "radix-ui";
+import type { FormEvent, ReactNode } from "react";
+
+export type DialogSize = "sm" | "md" | "lg" | "xl";
 
 export interface DialogProps {
   open: boolean;
-  title: string;
+  title: ReactNode;
   description?: ReactNode;
   children?: ReactNode;
   footer?: ReactNode;
-  size?: "sm" | "md" | "lg";
+  /** sm: confirms · md: Adjust stock, Restock · lg: Payment · xl: Add / Edit item (plan.md → Dialogs). */
+  size?: DialogSize;
   /** Called on ✕, Esc or a click on the overlay. Leave it out for dialogs that must not be dismissed. */
   onClose?: () => void;
   /** Wraps body and footer in a <form>, so Enter submits and footer buttons can be type="submit". */
   onSubmit?: (event: FormEvent<HTMLFormElement>) => void;
 }
 
-const SIZES = { sm: "max-w-sm", md: "max-w-xl", lg: "max-w-3xl" };
+const SIZES: Record<DialogSize, string> = {
+  sm: "max-w-[360px]",
+  md: "max-w-[512px]",
+  lg: "max-w-[608px]",
+  xl: "max-w-[736px]",
+};
 
 /**
- * Modal built on the native <dialog> element, which gives focus trapping,
- * Esc handling and the top layer for free (plan.md → Dialogs).
+ * Modal dialog (Radix: focus trap, Esc, scroll lock, works with menus and popovers inside).
+ * Header and footer stay put; only the body scrolls. Focus starts on the first field, or on the
+ * first footer button (Cancel) when there is none, because the ✕ comes last in the tab order.
  */
 export function Dialog({
   open,
@@ -31,16 +41,10 @@ export function Dialog({
   onClose,
   onSubmit,
 }: DialogProps) {
-  const ref = useRef<HTMLDialogElement>(null);
-  const titleId = useId();
-  const descriptionId = useId();
-
-  useEffect(() => {
-    const dialog = ref.current;
-    if (!dialog) return;
-    if (open && !dialog.open) dialog.showModal();
-    if (!open && dialog.open) dialog.close();
-  }, [open]);
+  const dismissible = Boolean(onClose);
+  const block = (event: Event) => {
+    if (!dismissible) event.preventDefault();
+  };
 
   const bodyAndFooter = (
     <>
@@ -54,53 +58,49 @@ export function Dialog({
   );
 
   return (
-    <dialog
-      ref={ref}
-      aria-labelledby={titleId}
-      aria-describedby={description ? descriptionId : undefined}
-      onCancel={(event) => {
-        event.preventDefault(); // `open` decides when it closes
-        onClose?.();
-      }}
-      onClick={(event) => {
-        if (event.target === event.currentTarget) onClose?.(); // click on the overlay
-      }}
-      className={clsx(
-        "m-auto max-h-[90vh] w-[calc(100%-2rem)] overflow-hidden rounded-[20px] bg-page p-0 text-text",
-        "backdrop:bg-overlay open:flex open:flex-col",
-        SIZES[size],
-      )}
-    >
-      <header className="flex items-start gap-4 border-b-2 border-border px-6 pt-5 pb-4">
-        <div className="min-w-0 flex-1">
-          <h2 id={titleId} className="text-xl font-semibold">
-            {title}
-          </h2>
-          {description && (
-            <div id={descriptionId} className="mt-1 text-text-muted">
-              {description}
-            </div>
+    <RadixDialog.Root open={open} onOpenChange={(next) => !next && onClose?.()}>
+      <RadixDialog.Portal>
+        <RadixDialog.Overlay className="fixed inset-0 z-40 bg-overlay" />
+        <RadixDialog.Content
+          onEscapeKeyDown={block}
+          onPointerDownOutside={block}
+          onInteractOutside={block}
+          {...(!description && { "aria-describedby": undefined })}
+          className={clsx(
+            "fixed top-1/2 left-1/2 z-50 flex max-h-[90vh] w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 flex-col",
+            "overflow-hidden rounded-[20px] bg-page text-text shadow-xl focus:outline-none",
+            SIZES[size],
           )}
-        </div>
-        {onClose && (
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            className="-mr-2 flex size-9 items-center justify-center rounded-full text-text-muted hover:bg-hover focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+        >
+          <header
+            className={clsx("border-b-2 border-border px-6 pt-5 pb-4", dismissible && "pr-16")}
           >
-            <IconX size={24} aria-hidden />
-          </button>
-        )}
-      </header>
+            <RadixDialog.Title className="text-xl font-semibold">{title}</RadixDialog.Title>
+            {description && (
+              <RadixDialog.Description asChild>
+                <div className="mt-1 text-text-muted">{description}</div>
+              </RadixDialog.Description>
+            )}
+          </header>
 
-      {onSubmit ? (
-        <form noValidate onSubmit={onSubmit} className="flex min-h-0 flex-1 flex-col">
-          {bodyAndFooter}
-        </form>
-      ) : (
-        bodyAndFooter
-      )}
-    </dialog>
+          {onSubmit ? (
+            <form noValidate onSubmit={onSubmit} className="flex min-h-0 flex-1 flex-col">
+              {bodyAndFooter}
+            </form>
+          ) : (
+            bodyAndFooter
+          )}
+
+          {dismissible && (
+            <RadixDialog.Close
+              aria-label="Close"
+              className="absolute top-4 right-4 flex size-9 items-center justify-center rounded-full text-text-muted hover:bg-hover focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+            >
+              <IconX size={24} aria-hidden />
+            </RadixDialog.Close>
+          )}
+        </RadixDialog.Content>
+      </RadixDialog.Portal>
+    </RadixDialog.Root>
   );
 }

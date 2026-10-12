@@ -197,7 +197,7 @@ Action names live in one TypeScript constant (`apps/api/src/audit/actions.ts`) s
 | Layer | Choice |
 |---|---|
 | Frontend | React + TypeScript + Vite |
-| UI | Tailwind CSS + shadcn/ui, Royal minimal palette, Prompt font (see section 9) |
+| UI | Tailwind CSS + own components in `components/ui` (Radix primitives via `radix-ui` for dialogs, menus, popovers), Royal minimal palette, Prompt font (see section 9) |
 | Server state | TanStack Query |
 | Cart state | Zustand |
 | Routing | React Router |
@@ -343,10 +343,16 @@ Categories
   PATCH  /categories/:id
 
 Products
-  GET    /products?search=&category=&active=
+  GET    /products?search=&categoryId=&status=active|inactive|all
   GET    /products/barcode/:code
-  POST   /products
-  PATCH  /products/:id
+  GET    /products/:id
+  POST   /products                (with startingStock → INITIAL movement)
+  PATCH  /products/:id            (no stock here; PRICE_CHANGE / PRODUCT_UPDATE audit)
+  POST   /products/:id/deactivate (reason optional)
+  POST   /products/:id/reactivate
+
+Settings
+  GET    /settings                (everyone; PATCH admin-only comes in step 10)
 
 Inventory
   POST   /inventory/restock       (body: items[{productId, qty}], note?; one transaction)
@@ -851,7 +857,7 @@ body {
 ```
 Usage: `bg-primary`, `hover:bg-primary-dark`, `text-text-muted`, `bg-warning-tint text-warning-text`.
 
-When adding shadcn/ui, map its variables to these tokens (`--primary` → `primary`, `--destructive` → `danger`, `--border` → `border`, `--muted-foreground` → `text-muted`) so its components pick up the palette.
+Components in `apps/web/src/components/ui` use these tokens directly (no shadcn/ui; Radix primitives underneath where focus handling is hard: Dialog, DropdownMenu, Popover).
 
 Use the same token names for Figma color variables so design and code match.
 
@@ -872,7 +878,11 @@ Use the same token names for Figma color variables so design and code match.
 - [x] **3. Shared package**: money utils, discount calc, Zod schemas, with unit tests
   - [x] `money.ts`: satang helpers, `parseThb` for typed amounts (string-based, no float rounding), formatting. `pricing.ts`: `calculateBill` (discount capped at subtotal), `calculateCash` (change / short), satang + qty + discount schemas. `time.ts`: Bangkok day keys and day ranges for reports and filters.
   - Feature schemas (product, restock, checkout, ...) are added to `packages/shared` in the step that builds each feature, next to its API.
-- [ ] **4. Products + categories**: API, barcode lookup, Stock page list + Add/Edit item dialogs (standalone components)
+- [x] **4. Products + categories**: API, barcode lookup, Stock page list + Add/Edit item dialogs (standalone components)
+  - [x] API: categories (list with counts, create, rename; unique ignoring case), products (list/search, barcode lookup, create with INITIAL movement, edit with PRICE_CHANGE / PRODUCT_UPDATE showing only changed fields, deactivate / reactivate), auto SKU `SKU-00001`, duplicate barcode/SKU errors name the other item. DB integration tests.
+  - [x] Web: Stock page (search + scan, All / Low / Out / Turned off chips with counts, category filter, Out → Low → name order), Add new item (live preview, + New category, Save and add another, discard confirm), Edit item, Deactivate / Turn back on. Filtering is client-side for now (fine for a few hundred items; the API already supports `?search=`).
+  - [x] `pnpm user:create` / `pnpm user:reset-password` terminal commands (audit logged as "Terminal (CLI)").
+  - Restock, Adjust stock and Movement history (button, row link and menu items) arrive in step 5.
 - [ ] **5. Inventory**: batch restock modal, adjust, movements, low stock
 - [ ] **6. Checkout + cash**: cart store, checkout transaction, idempotency, bill numbers, audit log
   - Checkout gets its own layout without the fixed sidebar: hamburger that slides the same nav in from the right (reuse `app/navigation.ts` and the Sidebar's nav list). Until then the placeholder uses the normal layout.

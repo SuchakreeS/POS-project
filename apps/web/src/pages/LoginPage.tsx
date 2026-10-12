@@ -9,6 +9,7 @@ import { PasswordField, TextField } from "@/components/ui/TextField";
 import { login } from "@/features/auth/auth-api";
 import { useAuthStore } from "@/features/auth/auth-store";
 import { errorMessage } from "@/lib/errors";
+import { focusFirstInvalid } from "@/lib/forms";
 
 type FieldErrors = Partial<Record<keyof LoginInput, string>>;
 
@@ -39,7 +40,7 @@ export function LoginPage() {
         errors[field] ??= issue.message;
       }
       setFieldErrors(errors);
-      focusField(event.currentTarget, Object.keys(errors)[0]);
+      focusFirstInvalid(event.currentTarget);
       return;
     }
     signIn.mutate(parsed.data); // on success the store changes and the redirect above runs
@@ -84,11 +85,6 @@ export function LoginPage() {
       </main>
     </div>
   );
-}
-
-function focusField(form: HTMLFormElement, name: string | undefined) {
-  const field = name ? form.elements.namedItem(name) : null;
-  if (field instanceof HTMLInputElement) field.focus();
 }
 
 /** Back to the page the user tried to open before being sent to login. */

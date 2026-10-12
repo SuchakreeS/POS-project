@@ -12,7 +12,9 @@ export const notFound: RequestHandler = (req, res) => {
 
 export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
   if (err instanceof HttpError) {
-    const body: ApiErrorBody = { error: { code: err.code, message: err.message } };
+    const body: ApiErrorBody = {
+      error: { code: err.code, message: err.message, ...(err.issues && { issues: err.issues }) },
+    };
     res.status(err.status).json(body);
     return;
   }

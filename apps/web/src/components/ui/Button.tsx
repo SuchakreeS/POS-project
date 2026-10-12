@@ -2,7 +2,8 @@ import { clsx } from "clsx";
 import type { ComponentProps, ReactNode } from "react";
 import { Spinner } from "./Spinner";
 
-export type ButtonVariant = "primary" | "secondary" | "outline" | "ghost" | "danger";
+export type ButtonVariant =
+  "primary" | "secondary" | "outline" | "ghost" | "danger" | "dangerSolid";
 export type ButtonSize = "sm" | "md" | "lg";
 
 export interface ButtonProps extends ComponentProps<"button"> {
@@ -25,6 +26,9 @@ const VARIANTS: Record<ButtonVariant, string> = {
     "border-border-strong bg-page text-text hover:bg-hover disabled:text-text-muted disabled:hover:bg-page",
   ghost: "border-transparent text-text-soft hover:bg-hover disabled:text-text-muted",
   danger: "border-transparent text-danger hover:bg-danger-tint disabled:text-text-muted",
+  /** Only inside a confirm step (plan.md → Buttons). */
+  dangerSolid:
+    "border-transparent bg-danger text-white hover:bg-danger-text disabled:bg-border-strong",
 };
 
 const SIZES: Record<ButtonSize, string> = {

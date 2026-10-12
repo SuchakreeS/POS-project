@@ -15,7 +15,9 @@
     "db:migrate": "node --env-file-if-exists=.env scripts/migrate.mjs",
     "db:deploy": "prisma migrate deploy",
     "db:seed": "prisma db seed",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "user:create": "node --env-file-if-exists=.env --import tsx scripts/users.ts create",
+    "user:reset-password": "node --env-file-if-exists=.env --import tsx scripts/users.ts reset-password"
   },
   "dependencies": {
     "@pos/shared": "workspace:*",

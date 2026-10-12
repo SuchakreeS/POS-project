@@ -1,4 +1,4 @@
-import type { ApiErrorCode } from "@pos/shared";
+import type { ApiErrorCode, ApiErrorIssue } from "@pos/shared";
 
 /**
  * Throw from services or routes to send a clean JSON error:
@@ -10,9 +10,16 @@ export class HttpError extends Error {
     public readonly status: number,
     public readonly code: ApiErrorCode,
     message: string,
+    /** Field-level messages, so forms can show the error under the right input. */
+    public readonly issues?: ApiErrorIssue[],
   ) {
     super(message);
     this.name = "HttpError";
+  }
+
+  /** 409 for a value that must be unique, shown under that field: `HttpError.duplicate("barcode", "…")`. */
+  static duplicate(field: string, message: string) {
+    return new HttpError(409, "CONFLICT", message, [{ path: [field], message }]);
   }
 
   static badRequest(message: string, code: ApiErrorCode = "VALIDATION") {

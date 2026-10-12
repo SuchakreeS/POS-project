@@ -22,7 +22,9 @@
     "db:migrate": "pnpm --filter @pos/api db:migrate",
     "db:deploy": "pnpm --filter @pos/api db:deploy",
     "db:seed": "pnpm --filter @pos/api db:seed",
-    "db:studio": "pnpm --filter @pos/api db:studio"
+    "db:studio": "pnpm --filter @pos/api db:studio",
+    "user:create": "pnpm --filter @pos/api user:create",
+    "user:reset-password": "pnpm --filter @pos/api user:reset-password"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

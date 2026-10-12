@@ -10,6 +10,8 @@ import { HOME_PATH } from "./navigation";
 
 const ADMIN_ONLY = ["ADMIN"] as const;
 
+// Feature pages load on first visit (`lazy`), so the login screen stays small and fast.
+
 export const router = createBrowserRouter([
   {
     path: "/",
@@ -28,7 +30,11 @@ export const router = createBrowserRouter([
                 children: [
                   { index: true, element: <Navigate to={HOME_PATH} replace /> },
                   { path: "checkout", element: <ComingSoonPage title="Checkout" step={6} /> },
-                  { path: "stock", element: <ComingSoonPage title="Stock" step={4} /> },
+                  {
+                    path: "stock",
+                    lazy: () =>
+                      import("@/pages/StockPage").then((m) => ({ Component: m.StockPage })),
+                  },
                   { path: "promptpay", element: <ComingSoonPage title="PromptPay" step={7} /> },
                   { path: "credit", element: <ComingSoonPage title="Credit" step={8} /> },
                   { path: "orders", element: <ComingSoonPage title="Orders" step={9} /> },

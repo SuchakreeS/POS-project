@@ -7,8 +7,12 @@ export interface TextFieldProps extends Omit<ComponentProps<"input">, "size"> {
   /** Shown under the field in red; also marks the input invalid for screen readers. */
   error?: string;
   hint?: string;
-  /** Unit or button inside the pill on the right (฿, pcs, eye toggle). */
+  /** Button inside the pill on the right (eye toggle, clear). */
   endAdornment?: ReactNode;
+  /** Unit inside the pill on the right: ฿ for money, pcs for quantities. */
+  unit?: string;
+  /** Extra content on the label line, right side (e.g. links). */
+  labelAside?: ReactNode;
 }
 
 /** Pill input with the label above it (plan.md → Inputs). */
@@ -17,6 +21,8 @@ export function TextField({
   error,
   hint,
   endAdornment,
+  unit,
+  labelAside,
   required,
   id,
   className,
@@ -26,13 +32,17 @@ export function TextField({
   const inputId = id ?? generatedId;
   const messageId = `${inputId}-message`;
   const message = error ?? hint;
+  const trailing = endAdornment ?? (unit && <span className="pr-3 text-text-muted">{unit}</span>);
 
   return (
     <div className={clsx("flex flex-col gap-1.5", className)}>
-      <label htmlFor={inputId} className="text-sm font-medium text-text">
-        {label}
-        {required && <span className="text-danger"> *</span>}
-      </label>
+      <div className="flex items-baseline justify-between gap-3">
+        <label htmlFor={inputId} className="text-sm font-medium text-text">
+          {label}
+          {required && <span className="text-danger"> *</span>}
+        </label>
+        {labelAside}
+      </div>
 
       <div className="relative">
         <input
@@ -43,16 +53,18 @@ export function TextField({
           className={clsx(
             "h-10 w-full rounded-full border-2 bg-surface-alt px-4 text-base text-text transition-colors",
             "placeholder:text-placeholder focus:bg-page focus:ring-1 focus:outline-none",
+            "read-only:bg-hover read-only:focus:border-border read-only:focus:ring-0",
             error
               ? "border-danger focus:border-danger focus:ring-danger"
               : "border-border focus:border-primary focus:ring-primary",
             endAdornment && "pr-12",
+            unit && !endAdornment && "pr-14",
           )}
           {...inputProps}
         />
-        {endAdornment && (
+        {trailing && (
           <div className="absolute inset-y-0 right-1.5 flex items-center text-text-muted">
-            {endAdornment}
+            {trailing}
           </div>
         )}
       </div>

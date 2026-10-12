@@ -89,6 +89,8 @@ pnpm dev
 | `pnpm db:deploy`             | Apply existing migrations (staging / production)               |
 | `pnpm db:seed`               | Seed data                                                      |
 | `pnpm db:studio`             | Browse the database in Prisma Studio                           |
+| `pnpm user:create`           | Add a user (e.g. a cashier) from the terminal                  |
+| `pnpm user:reset-password`   | Set a new password for a user (logs them out everywhere)       |
 
 `db:init` and `db:migrate` add **row level security** to every new table automatically, so
 Supabase's public Data API can't read the data — only our API can.
