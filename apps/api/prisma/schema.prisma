@@ -94,6 +94,24 @@ model User {
   stockMovements    StockMovement[]
   creditEntries     CreditEntry[]
   reportsGenerated  DailyReport[]
+  sessions          Session[]
+}
+
+// Login sessions. The refresh token itself is never stored, only its SHA-256 hash.
+// The token is rotated on every refresh; logout sets revokedAt.
+model Session {
+  id         String    @id @default(uuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash  String    @unique
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  lastUsedAt DateTime  @default(now())
+  ip         String?
+  userAgent  String?
+  createdAt  DateTime  @default(now())
+
+  @@index([userId])
 }
 
 model Terminal {

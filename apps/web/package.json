@@ -12,8 +12,13 @@
   },
   "dependencies": {
     "@pos/shared": "workspace:*",
+    "@tabler/icons-react": "^3.49.0",
+    "@tanstack/react-query": "^5.104.2",
+    "clsx": "^2.1.1",
     "react": "^19.3.0",
-    "react-dom": "^19.3.0"
+    "react-dom": "^19.3.0",
+    "react-router": "^8.4.0",
+    "zustand": "^5.0.15"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",

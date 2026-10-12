@@ -148,6 +148,16 @@ Two roles only. Cashier can run the whole shop; Admin adds user and settings man
 
 Since cashiers can void, discount, change prices and adjust stock, the audit log is the main safety net. Every one of those actions must be logged with who, when, before/after and reason.
 
+### Auth (built in step 2)
+- **Access token**: JWT (HS256), 15 minutes, kept in memory only (never localStorage), sent as `Authorization: Bearer …`.
+- **Refresh token**: random 32 bytes in an httpOnly cookie `pos_refresh` (path `/auth`; dev `SameSite=Lax`, prod `SameSite=None; Secure`). The database keeps only its HMAC hash in the `Session` table. Every refresh **rotates** it and extends the session to 7 days from now (sliding), so a shop PC that is used daily stays logged in.
+- Logout revokes the session. Turning a user off blocks their next refresh (within 15 minutes everywhere).
+- Every request carries `x-pos-client: web`; auth endpoints reject requests without it (blocks cross-site form posts).
+- Login is rate-limited (10 failed tries per 15 minutes per IP + username). Wrong username and wrong password give the same message; "turned off" is only shown after the right password.
+- Web: on 401 the client refreshes once and retries. Parallel refreshes share one request, and tabs take turns through the Web Locks API, because rotation makes a second refresh with the same cookie fail.
+- If the session ends while a page is open, the page stays and the "Please log in again" dialog opens over it (section 9 → Session expired).
+- Audit: `LOGIN`, `LOGIN_FAILED` (with reason), `LOGOUT`.
+
 ### Audit log (Phase 1: recorded, no screen yet)
 Stored in the `AuditLog` table from day one. There is **no page in Phase 1**; the "Activity" screen is the **first thing built right after Phase 1** (see Later phases). Until then, the admin can read it in Supabase. Not shown in the sidebar.
 
@@ -216,7 +226,7 @@ Action names live in one TypeScript constant (`apps/api/src/audit/actions.ts`) s
    - Paid Render instance (always on), or
    - Render Cron Job service calling the report job, or
    - Supabase `pg_cron` + `pg_net` calling a protected `POST /internal/reports/daily` endpoint
-   Decide before step 9. Build the report as a callable function + protected endpoint either way, so the trigger can be swapped.
+   Decide before step 11. Build the report as a callable function + protected endpoint either way, so the trigger can be swapped.
 2. **Supabase connections**: use the Supabase pooler connection strings. Pooled URL for the running app, session/direct URL for migrations. Verify the exact Prisma 7 + Supabase setup in both docs during step 1.
 3. **Supabase Data API exposure**: tables Prisma creates in the `public` schema can be reachable through Supabase's auto-generated API. Since only the backend talks to the DB, **enable RLS on every table with no policies** (or disable the Data API / use a separate schema). Add this to the first migration.
 4. **Vercel ↔ Render cross-site**: configure CORS for the Vercel domain only. Refresh cookie needs `SameSite=None; Secure`.
@@ -251,12 +261,13 @@ pos-system/
 ├─ apps/
 │  ├─ web/                       # React frontend (Vercel)
 │  │  └─ src/
-│  │     ├─ pages/               # Login, Checkout, Products, Inventory,
-│  │     │                       # Credit, Orders, Reports, Users, Settings
-│  │     ├─ components/          # shared UI (shadcn/ui based)
-│  │     ├─ features/            # cart, checkout, credit, reports, ...
-│  │     ├─ stores/              # Zustand (cart, terminal)
-│  │     ├─ lib/                 # api client, auth, money formatting
+│  │     ├─ app/                 # router, navigation config, query client
+│  │     ├─ pages/               # one file per route (Login, Checkout, Stock, ...)
+│  │     ├─ components/
+│  │     │  ├─ ui/               # Button, TextField, Dialog, Alert, EmptyState, ...
+│  │     │  └─ layout/           # AppLayout, Sidebar (right), PageHeader
+│  │     ├─ features/            # auth, cart, checkout, credit, ... (store + api + components per feature)
+│  │     ├─ lib/                 # http client, api instance, config, error messages
 │  │     └─ main.tsx
 │  └─ api/                       # Express backend (Render)
 │     ├─ prisma/
@@ -266,7 +277,7 @@ pos-system/
 │     ├─ prisma.config.ts
 │     └─ src/
 │        ├─ modules/             # one folder per feature
-│        │  ├─ auth/             #   routes.ts, controller.ts, service.ts
+│        │  ├─ auth/             #   auth.routes.ts, auth.service.ts, tokens, cookies, password
 │        │  ├─ users/
 │        │  ├─ products/
 │        │  ├─ categories/
@@ -296,7 +307,8 @@ Full schema in `apps/api/prisma/schema.prisma`.
 
 | Model | Purpose |
 |---|---|
-| `User` | Login, role |
+| `User` | Login, role, last login |
+| `Session` | Refresh-token sessions (hash only), for rotation and logout |
 | `Terminal` | Checkout device, bill number prefix + sequence |
 | `Category` | Product grouping |
 | `Product` | Catalog + cached stock |
@@ -850,20 +862,25 @@ Use the same token names for Figma color variables so design and code match.
 - [x] **1. Setup**: pnpm monorepo, TypeScript, ESLint/Prettier, Tailwind theme tokens + Prompt font, Supabase project, Prisma 7 config, first migration (+ RLS on all tables), seed (admin user, terminal T1, ShopSetting row, sample products)
   - [x] Code scaffold done 2026-10-12 (monorepo, api, web, shared, Prisma 7 + pg adapter, seed, `pnpm db:init` with RLS, README). Install, typecheck, lint, tests and build pass.
   - [x] On the dev PC (2026-10-12): local PostgreSQL 17 database `pos_dev` for development, `pnpm db:init` + `pnpm db:seed` run, setup page all green.
-  - [ ] Supabase project for staging/production: create it and run `pnpm db:deploy` against it before the first deploy (step 12).
+  - [ ] Supabase project for staging/production: create it and run `pnpm db:deploy` against it before the first deploy (step 13).
   - Dev database decision: local PostgreSQL (not MySQL) so migrations and SQL match Supabase.
   - Pinned versions: Node 22.12+, pnpm 10.34, TypeScript 6.0, Prisma 7.10 (8.0 is still RC), React 19.3, Vite 8, Tailwind 4.3, Express 5, Zod 4, ESLint 10.
-- [ ] **2. Auth + roles**: login, JWT access/refresh, `requireRole` middleware, audit login events
+- [x] **2. Auth + roles**: login, JWT access/refresh, `requireRole` middleware, audit login events
+  - [x] API: login / refresh (rotating) / logout / me, `Session` table, rate limit, client-header guard, error format `{ error: { code, message } }`, audit LOGIN / LOGIN_FAILED / LOGOUT. Unit + Supertest + DB integration tests.
+  - [x] Web: API client with refresh-and-retry, auth store, route guards, Login page, right sidebar layout, Session expired dialog, No permission page, placeholder pages, setup check moved to `/setup`.
+  - [x] `pnpm db:migrate` now adds row level security to new tables by itself.
 - [ ] **3. Shared package**: money utils, discount calc, Zod schemas, with unit tests
 - [ ] **4. Products + categories**: API, barcode lookup, Stock page list + Add/Edit item dialogs (standalone components)
 - [ ] **5. Inventory**: batch restock modal, adjust, movements, low stock
 - [ ] **6. Checkout + cash**: cart store, checkout transaction, idempotency, bill numbers, audit log
+  - Checkout gets its own layout without the fixed sidebar: hamburger that slides the same nav in from the right (reuse `app/navigation.ts` and the Sidebar's nav list). Until then the placeholder uses the normal layout.
 - [ ] **7. PromptPay + credit payment**: PromptPay as pending at checkout, PromptPay check page (mark received / undo), credit charge at checkout
 - [ ] **8. Credit page**: balances, history, repayments
 - [ ] **9. Orders + void**: history, filters, void transaction
-- [ ] **10. Reports**: manual summary, saved daily snapshot, LINE push, scheduled trigger (decide Render sleep option)
-- [ ] **11. Testing pass**: checkout, void, discount clamp, credit balance, report totals
-- [ ] **12. Deploy**: Vercel (web), Render (API), Supabase (prod DB), env vars, CORS, smoke test
+- [ ] **10. Users + Settings (Admin)**: users list, add / edit / reset password / turn off, shop settings (report time is read by step 11)
+- [ ] **11. Reports**: manual summary, saved daily snapshot, LINE push, scheduled trigger (decide Render sleep option)
+- [ ] **12. Testing pass**: checkout, void, discount clamp, credit balance, report totals
+- [ ] **13. Deploy**: Vercel (web), Render (API), Supabase (prod DB), env vars, CORS, smoke test
 
 ---
 
@@ -908,7 +925,7 @@ Use the same token names for Figma color variables so design and code match.
 - [ ] Small fixes: cart Subtotal → Discount → Total order; login labels above fields
 - [ ] Build Adjust stock and Movement history in Figma (approved and specced in section 9; Figma build paused by the Starter plan's MCP limit)
 
-### Needed later (by build step 10)
+### Needed later (by build step 11)
 - [ ] Choose how the auto report is triggered (paid Render / Render Cron Job / Supabase pg_cron)
 - [ ] Report time (closing time) for the auto report (set on the Settings page, stored in `ShopSetting.reportTime`; the scheduler must read it)
 - [ ] Print the shop PromptPay QR for the counter

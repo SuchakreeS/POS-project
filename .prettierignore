@@ -4,3 +4,5 @@ coverage
 pnpm-lock.yaml
 **/generated/**
 **/migrations/**
+# Hand-formatted docs (tables stay readable in diffs)
+plan.md

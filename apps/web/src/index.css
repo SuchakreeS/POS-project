@@ -13,6 +13,11 @@
   --color-border: #e5e7eb;
   --color-text: #1f2937;
   --color-text-muted: #6b7280;
+  --color-text-soft: #4b5563; /* text buttons, default icon color */
+  --color-placeholder: #9ca3af;
+  --color-hover: #f3f4f6; /* hover on rows, nav items, text buttons */
+  --color-border-strong: #d1d5db; /* chips, outlined buttons, disabled primary */
+  --color-overlay: rgb(15 23 42 / 0.45); /* behind dialogs */
 
   --color-success: #16a34a;
   --color-success-tint: #dcfce7;

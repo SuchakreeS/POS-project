@@ -17,7 +17,9 @@ const EnvSchema = z.object({
         .map((origin) => origin.trim())
         .filter(Boolean),
     ),
+  /** Signs access tokens (JWT, HS256). */
   JWT_ACCESS_SECRET: z.string().min(1).default("dev-access-secret"),
+  /** HMAC key for storing refresh tokens (only their keyed hash is saved in the database). */
   JWT_REFRESH_SECRET: z.string().min(1).default("dev-refresh-secret"),
   REPORT_TIMEZONE: z.string().default("Asia/Bangkok"),
   INTERNAL_JOB_SECRET: z.string().optional(),
@@ -39,8 +41,8 @@ export const env = parsed.data;
 
 if (env.NODE_ENV === "production") {
   for (const key of ["JWT_ACCESS_SECRET", "JWT_REFRESH_SECRET"] as const) {
-    if (env[key].startsWith("dev-") || env[key].startsWith("change-me")) {
-      console.error(`❌ ${key} must be set to a real secret in production.`);
+    if (env[key].startsWith("dev-") || env[key].startsWith("change-me") || env[key].length < 32) {
+      console.error(`❌ ${key} must be a real secret (32+ characters) in production.`);
       process.exit(1);
     }
   }

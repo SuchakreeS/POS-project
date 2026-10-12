@@ -1,15 +1,19 @@
-const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:4000";
+import { refreshSession } from "@/features/auth/session";
+import { useAuthStore } from "@/features/auth/auth-store";
+import { API_URL, CLIENT_HEADER } from "./config";
+import { createHttpClient } from "./http-client";
 
-/** Small fetch wrapper for the POS API. Sends cookies (refresh token) cross-site. */
-export async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`, {
-    credentials: "include",
-    headers: { "Content-Type": "application/json", ...init?.headers },
-    ...init,
-  });
-  if (!res.ok) {
-    const body = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
-    throw new Error(body?.error?.message ?? `Request failed (${res.status})`);
-  }
-  return (await res.json()) as T;
-}
+/**
+ * The client every feature uses for API calls.
+ * Sends the access token; on 401 it refreshes once and retries, and if the session is over
+ * the app shows the "Please log in again" dialog (the page and its data stay as they are).
+ */
+export const api = createHttpClient({
+  baseUrl: API_URL,
+  headers: CLIENT_HEADER,
+  auth: {
+    getAccessToken: () => useAuthStore.getState().accessToken,
+    refresh: refreshSession,
+    onSessionExpired: () => useAuthStore.getState().expire(),
+  },
+});
