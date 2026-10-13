@@ -13,6 +13,8 @@ interface ConfirmDialogProps {
   cancelLabel?: string;
   /** Destructive actions get a solid red button (plan.md → Confirm dialogs). */
   destructive?: boolean;
+  /** Amber icon for "are you sure?" about a status (stock), since blue is only for actions. */
+  warning?: boolean;
   loading?: boolean;
   error?: ReactNode;
   onConfirm: () => void;
@@ -28,6 +30,7 @@ export function ConfirmDialog({
   confirmLabel,
   cancelLabel = "Cancel",
   destructive,
+  warning,
   loading,
   error,
   onConfirm,
@@ -42,7 +45,11 @@ export function ConfirmDialog({
           <span
             className={clsx(
               "flex size-10 shrink-0 items-center justify-center rounded-full",
-              destructive ? "bg-danger-tint text-danger" : "bg-primary-tint text-primary",
+              destructive
+                ? "bg-danger-tint text-danger"
+                : warning
+                  ? "bg-warning-tint text-warning"
+                  : "bg-primary-tint text-primary",
             )}
           >
             <Icon size={22} aria-hidden />

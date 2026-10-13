@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { useCurrentUser } from "@/features/auth/auth-store";
 import { ROLE_LABELS } from "@/features/auth/roles";
 import { useLogout } from "@/features/auth/use-logout";
+import { usePromptPayPendingCount } from "@/features/promptpay/queries";
 
 /**
  * Logo, nav links and the signed-in user with Log out (plan.md → Sidebar).
@@ -16,6 +17,9 @@ export function NavContent({ onNavigate }: { onNavigate?: () => void }) {
   const user = useCurrentUser();
   const logout = useLogout();
   const [loggingOut, setLoggingOut] = useState(false);
+  // Amber count on PromptPay: bills still waiting to be checked (plan.md → Sidebar).
+  const pendingPromptPay = usePromptPayPendingCount();
+  const badgeFor = (item: NavItem) => (item.to === "/promptpay" ? pendingPromptPay : undefined);
 
   const handleLogout = async () => {
     setLoggingOut(true);
@@ -35,7 +39,7 @@ export function NavContent({ onNavigate }: { onNavigate?: () => void }) {
             <ul className="flex flex-col gap-1">
               {section.items.map((item) => (
                 <li key={item.to}>
-                  <NavItemLink item={item} onNavigate={onNavigate} />
+                  <NavItemLink item={item} badge={badgeFor(item)} onNavigate={onNavigate} />
                 </li>
               ))}
             </ul>
@@ -88,7 +92,7 @@ function NavItemLink({
       onClick={onNavigate}
       className={({ isActive }) =>
         clsx(
-          "flex h-10 items-center gap-3 rounded-xl px-3 transition-colors",
+          "flex h-10 items-center gap-2.5 rounded-xl px-3 transition-colors",
           "focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none",
           isActive
             ? "bg-primary-tint font-semibold text-primary-dark"
@@ -99,7 +103,10 @@ function NavItemLink({
       <Icon size={20} aria-hidden className="shrink-0" />
       <span className="min-w-0 flex-1 truncate">{item.label}</span>
       {badge ? (
-        <span className="rounded-full bg-warning-tint px-2 text-sm font-semibold text-warning-text">
+        <span
+          aria-label={`${badge} waiting`}
+          className="shrink-0 rounded-full bg-warning-tint px-1.5 text-sm font-semibold text-warning-text"
+        >
           {badge}
         </span>
       ) : null}

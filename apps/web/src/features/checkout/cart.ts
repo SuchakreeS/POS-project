@@ -56,3 +56,15 @@ export function buildCart(
     sellable: rows.length > 0 && rows.every((row) => !row.problem),
   };
 }
+
+/**
+ * Misclick guard (stock): adding more than the stock count asks first — once per product per bill.
+ * Never blocks: stock can be wrong (a delivery not entered yet), and the item is in the customer's hand.
+ */
+export function needsStockConfirm(
+  product: Pick<Product, "id" | "stockQty">,
+  nextQty: number,
+  confirmed: readonly string[],
+): boolean {
+  return nextQty > product.stockQty && !confirmed.includes(product.id);
+}

@@ -1,6 +1,6 @@
 import type { Product } from "@pos/shared";
 import { beforeEach, describe, expect, it } from "vitest";
-import { buildCart } from "./cart";
+import { buildCart, needsStockConfirm } from "./cart";
 import { useCartStore } from "./cart-store";
 
 const product = (id: string, price: number, overrides: Partial<Product> = {}): Product => ({
@@ -93,5 +93,31 @@ describe("buildCart", () => {
     ]);
     expect(view.totals.total).toBe(700);
     expect(view.sellable).toBe(false);
+  });
+});
+
+describe("needsStockConfirm", () => {
+  const oil = product("oil", 5500, { stockQty: 3 });
+  const soy = product("soy", 1200, { stockQty: 0 });
+
+  it("asks when the bill would hold more than the stock count", () => {
+    expect(needsStockConfirm(oil, 3, [])).toBe(false);
+    expect(needsStockConfirm(oil, 4, [])).toBe(true);
+    expect(needsStockConfirm(soy, 1, [])).toBe(true);
+  });
+
+  it("asks only once per product per bill", () => {
+    expect(needsStockConfirm(soy, 5, ["soy"])).toBe(false);
+  });
+
+  it("forgets the answer when the line is removed or the bill is cleared", () => {
+    cart().add("soy");
+    cart().allowOverStock("soy");
+    expect(cart().overStockOk).toEqual(["soy"]);
+    cart().remove("soy");
+    expect(cart().overStockOk).toEqual([]);
+    cart().allowOverStock("soy");
+    cart().clear();
+    expect(cart().overStockOk).toEqual([]);
   });
 });

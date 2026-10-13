@@ -1,5 +1,5 @@
 import type { Product } from "@pos/shared";
-import { IconPackageOff, IconSearch, IconTrash } from "@tabler/icons-react";
+import { IconAlertTriangle, IconPackageOff, IconSearch, IconTrash } from "@tabler/icons-react";
 import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
 import { NavDrawer } from "@/components/layout/NavDrawer";
@@ -17,14 +17,21 @@ import {
 } from "@/features/catalog/components/ProductSearchBox";
 import { useProducts } from "@/features/catalog/queries";
 import { matchesSearch } from "@/features/catalog/stock-filter";
-import { buildCart } from "@/features/checkout/cart";
+import { buildCart, needsStockConfirm } from "@/features/checkout/cart";
 import { useCartStore } from "@/features/checkout/cart-store";
 import { CartPanel } from "@/features/checkout/components/CartPanel";
 import { PaymentDialog } from "@/features/checkout/components/PaymentDialog";
 import { useTerminal } from "@/features/checkout/terminal";
 import { useShopSettings } from "@/features/settings/queries";
 
-type Overlay = "payment" | "discount" | "clear" | { addBarcode: string } | null;
+type Overlay =
+  | "payment"
+  | "discount"
+  | "clear"
+  | { addBarcode: string }
+  /** Misclick guard: the bill would hold more than the stock count. */
+  | { stockCheck: { product: Product; qty: number } }
+  | null;
 
 /**
  * Checkout (plan.md → Checkout layout, Scanner and keyboard): product grid with the scan box on
@@ -35,7 +42,8 @@ export function CheckoutPage() {
   const { terminal, isError: terminalError, isPending: terminalPending } = useTerminal();
   useShopSettings(); // Add new item (unknown barcode) pre-fills the low-stock alert from it
 
-  const { lines, discount, selectedId, add, remove, clear } = useCartStore();
+  const { lines, discount, selectedId, overStockOk, add, setQty, remove, clear, allowOverStock } =
+    useCartStore();
   const cart = useMemo(
     () => buildCart(lines, products.data ?? [], discount),
     [lines, products.data, discount],
@@ -45,6 +53,14 @@ export function CheckoutPage() {
   const [category, setCategory] = useState("");
   const [overlay, setOverlay] = useState<Overlay>(null);
   const search = useRef<ProductSearchBoxHandle>(null);
+  const addBarcode =
+    typeof overlay === "object" && overlay && "addBarcode" in overlay
+      ? overlay.addBarcode
+      : undefined;
+  const stockCheck =
+    typeof overlay === "object" && overlay && "stockCheck" in overlay
+      ? overlay.stockCheck
+      : undefined;
 
   const backToScanning = () => {
     setOverlay(null);
@@ -52,7 +68,24 @@ export function CheckoutPage() {
     requestAnimationFrame(() => search.current?.focus());
   };
 
-  const pick = (product: Product) => add(product.id);
+  const qtyInCart = (productId: string) =>
+    lines.find((line) => line.productId === productId)?.qty ?? 0;
+
+  /** Every way of adding goes through here: going over the stock count asks first (once per item). */
+  const requestQty = (product: Product, qty: number) => {
+    if (qty > qtyInCart(product.id) && needsStockConfirm(product, qty, overStockOk)) {
+      setOverlay({ stockCheck: { product, qty } });
+      return;
+    }
+    applyQty(product.id, qty);
+  };
+
+  const applyQty = (productId: string, qty: number) => {
+    if (qtyInCart(productId) === 0) add(productId, qty);
+    else setQty(productId, qty);
+  };
+
+  const pick = (product: Product) => requestQty(product, qtyInCart(product.id) + 1);
 
   // ---------- Keyboard ----------
   const onKeyDown = useEffectEvent((event: KeyboardEvent) => {
@@ -183,6 +216,11 @@ export function CheckoutPage() {
 
       <CartPanel
         cart={cart}
+        onQtyChange={(productId, qty) => {
+          const product = cart.rows.find((row) => row.productId === productId)?.product;
+          if (product) requestQty(product, qty);
+          else setQty(productId, qty); // item gone from the list: only lowering/removing makes sense
+        }}
         discountOpen={overlay === "discount"}
         onDiscountOpenChange={(open) => (open ? setOverlay("discount") : backToScanning())}
         onCheckout={() => setOverlay("payment")}
@@ -218,12 +256,41 @@ export function CheckoutPage() {
       />
 
       <AddItemDialog
-        open={typeof overlay === "object" && overlay !== null}
-        initialBarcode={
-          typeof overlay === "object" && overlay !== null ? overlay.addBarcode : undefined
-        }
+        open={addBarcode !== undefined}
+        initialBarcode={addBarcode}
         onClose={backToScanning}
-        onSaved={pick}
+        onSaved={(product) => {
+          // Just created from the item in hand: no stock question.
+          allowOverStock(product.id);
+          add(product.id);
+        }}
+      />
+
+      <ConfirmDialog
+        open={stockCheck !== undefined}
+        icon={IconAlertTriangle}
+        warning
+        title={
+          stockCheck && stockCheck.product.stockQty <= 0
+            ? `${stockCheck.product.name} is out of stock`
+            : `Only ${stockCheck?.product.stockQty.toLocaleString("en-US")} ${stockCheck?.product.name} in stock`
+        }
+        description={
+          <>
+            The bill would have {stockCheck?.qty.toLocaleString("en-US")}. If the item is really
+            here (a delivery not entered yet), add it anyway and restock it later.
+          </>
+        }
+        cancelLabel="Don't add"
+        confirmLabel="Add anyway"
+        onCancel={backToScanning}
+        onConfirm={() => {
+          if (stockCheck) {
+            allowOverStock(stockCheck.product.id);
+            applyQty(stockCheck.product.id, stockCheck.qty);
+          }
+          backToScanning();
+        }}
       />
     </div>
   );

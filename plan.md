@@ -103,6 +103,7 @@ total          = subtotal - discountAmount   // never below 0
 - Creating a product with starting stock writes the product, the `INITIAL` movement, `stockQty`, and the audit log (`PRODUCT_CREATE`) in one transaction. Starting stock 0 creates no movement.
 - `Product.stockQty` is a cached total, updated in the same transaction as the movement row.
 - Selling below zero stock is allowed but flagged (prepares for offline later).
+- **Misclick guard at checkout (decided 2026-10-13):** adding more than the stock count (an Out item, or the 4th of 3) asks first — "Only 3 Cooking oil in stock · Don't add / Add anyway", with **Don't add** focused so a stray click or Enter adds nothing. Asked once per item per bill. The cart line then shows "Only 3 in stock" / "Out of stock" in amber. Never a hard block: the count can be wrong (delivery not entered yet).
 
 ### Checkout transaction (all-or-nothing)
 In one `prisma.$transaction`:
@@ -371,12 +372,13 @@ Orders
   POST   /orders/:id/void         (reason required)
 
 PromptPay
-  GET    /promptpay/pending
-  POST   /promptpay/receive              (body: orderIds[], marks RECEIVED)
+  GET    /promptpay                      (all pending, any date + received today, oldest first, with stats)
+  GET    /promptpay/summary              (pending count for the sidebar badge)
+  POST   /promptpay/receive              (body: orderIds[], marks RECEIVED; already-received bills are skipped)
   POST   /promptpay/:orderId/undo        (reason required)
 
 Credit
-  GET    /credit/customers?search=        (with balances)
+  GET    /credit/customers?search=&limit= (with balances; checkout autocomplete uses it too)
   GET    /credit/customers/:id            (history)
   POST   /credit/repayments
 
@@ -503,7 +505,7 @@ Target device: **PC screen with keyboard, mouse and barcode scanner** (not touch
 - Content: product name (2 lines max, then ellipsis), stock badge, price with ฿. No image by default; image optional for items without barcodes.
 - Variant properties: `State` = Normal / Hover / Selected, `Stock` = Normal / Low / Out.
   - Hover: `primary` border. Selected (last scanned): `primary-tint` background + `primary` border.
-- Out of stock is **still clickable/sellable** (stock may be wrong; negative stock is flagged). It shows the red badge; don't dim it when Selected.
+- Out of stock is **still clickable/sellable** (stock may be wrong; negative stock is flagged), but asks "Add anyway?" first (see Business rules → Stock). It shows the red badge; don't dim it when Selected.
 
 **Stock badge**
 - Pill with a colored dot + label. Dot uses the mid color, text uses the dark shade on the tint:
@@ -896,7 +898,9 @@ Use the same token names for Figma color variables so design and code match.
   - [x] Web: Checkout page with its own layout (scan box + category chips + product grid, "Current bill" panel, nav in a slide-in drawer from the right). Cart keeps only ids + quantities and is saved in local storage (survives reload / lost connection). Scan +1, typing anywhere lands in the scan box, unknown barcode banner + beep + Add as new item. − qty + with typing, Del removes the selected line, Clear bill (confirm). Discount popover (F4, chips 5/10/20/50, capped preview). Payment dialog: Cash; PromptPay / Credit cards shown but disabled until step 7.
   - Decisions made while building: an **empty "Amount received" means paid exactly** (F9 → Enter); the 1 / 2 / 3 method keys work when the cursor isn't in the amount field (digits type the amount there); a barcode scanned on the success screen starts the next sale with that item; the terminal is the first active one until Settings (step 10) lets an admin pick it per PC.
   - "View bill" on the success screen comes with the Orders page (step 9).
-- [ ] **7. PromptPay + credit payment**: PromptPay as pending at checkout, PromptPay check page (mark received / undo), credit charge at checkout
+- [x] **7. PromptPay + credit payment**: PromptPay as pending at checkout, PromptPay check page (mark received / undo), credit charge at checkout
+  - [x] API: checkout takes `PROMPTPAY` (saved PENDING, no cash) and `CREDIT` (existing customer by id, or a new name — reused if the name matches ignoring case/spaces; CHARGE entry; CUSTOMER_CREATE + CREDIT_CHARGE with balance before → after; refused when the total is 0). `POST /orders` now returns `{ order, customerBalance }`. PromptPay board / summary / receive (bulk, one PROMPTPAY_RECEIVED per bill) / undo (reason, PROMPTPAY_RECEIVED_UNDO). Voided bills drop off the list. DB integration tests.
+  - [x] Web: payment dialog has all three methods (Complete sale / Save as pending / Add to credit), customer autocomplete with what each person owes + "New customer", "will owe 22.00 → 207.00 ฿", success states for each method. PromptPay page: stat cards, Pending / Received today / All, grouped by day, "Same amount" tag (same amount within 30 min), select + bulk bar, Mark received, undo with reason. Amber pending count on the sidebar (refreshes every minute).
 - [ ] **8. Credit page**: balances, history, repayments
 - [ ] **9. Orders + void**: history, filters, void transaction
 - [ ] **10. Users + Settings (Admin)**: users list, add / edit / reset password / turn off, shop settings (report time is read by step 11)

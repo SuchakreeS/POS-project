@@ -75,6 +75,23 @@ pnpm dev
 - Setup check (web → API → database): http://localhost:5173/setup
 - API: http://localhost:4000/health?db=1
 
+## Testing with others (Cloudflare tunnel)
+
+Let someone outside your PC try the app while it runs on your machine:
+
+1. In `apps/web/.env`, set `VITE_API_URL="/api"` (the default in `.env.example`). The web dev server then
+   forwards API calls to `localhost:4000`, so a single tunnel covers the app and the API, and login works.
+2. Run `pnpm dev`, then in another terminal:
+
+   ```bash
+   cloudflared tunnel --url http://localhost:5173
+   ```
+
+3. Send the `https://….trycloudflare.com` link it prints. Vite already allows those hosts (`vite.config.ts`).
+
+Anyone with the link reaches your login page, so test with throwaway accounts (`pnpm user:create`) and
+stop the tunnel (Ctrl+C) when you're done.
+
 ## Everyday commands
 
 | Command                      | What it does                                                   |

@@ -19,6 +19,8 @@ interface CartPanelProps {
   onClear: () => void;
   /** Why checkout can't start (no terminal, …); shown above the button. */
   blocker?: ReactNode;
+  /** Quantity changes go through the page, which may ask about stock first. */
+  onQtyChange: (productId: string, qty: number) => void;
 }
 
 /** "Current bill" panel on the right of Checkout (plan.md → Checkout layout). Never hidden. */
@@ -29,8 +31,9 @@ export function CartPanel({
   onCheckout,
   onClear,
   blocker,
+  onQtyChange,
 }: CartPanelProps) {
-  const { selectedId, discount, setQty, remove, select, setDiscount } = useCartStore();
+  const { selectedId, discount, remove, select, setDiscount } = useCartStore();
   const { totals } = cart;
 
   return (
@@ -72,7 +75,7 @@ export function CartPanel({
               row={row}
               selected={row.productId === selectedId}
               onSelect={() => select(row.productId)}
-              onQty={(qty) => setQty(row.productId, qty)}
+              onQty={(qty) => onQtyChange(row.productId, qty)}
               onRemove={() => remove(row.productId)}
             />
           ))}
@@ -173,6 +176,13 @@ function CartLineRow({
           <p className="flex items-center gap-1 text-sm text-danger">
             <IconAlertCircle size={14} aria-hidden />
             {row.problem} — remove it
+          </p>
+        ) : row.product && row.qty > row.product.stockQty ? (
+          // Allowed (stock may be wrong), but visible so the cashier can double-check.
+          <p className="text-sm font-medium text-warning-text">
+            {row.product.stockQty <= 0
+              ? "Out of stock"
+              : `Only ${row.product.stockQty.toLocaleString("en-US")} in stock`}
           </p>
         ) : (
           row.product && <p className="text-sm text-text-muted">{formatTHB(row.product.price)}</p>

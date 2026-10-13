@@ -1,40 +1,27 @@
 import {
-  calculateCash,
-  cashQuickAmounts,
-  formatSatang,
   formatTHB,
-  parseThb,
-  type Order,
+  type CheckoutResponse,
+  type PaymentInput,
   type PaymentMethod,
 } from "@pos/shared";
-import {
-  IconCash,
-  IconCircleCheckFilled,
-  IconCreditCard,
-  IconQrcode,
-  type TablerIcon,
-} from "@tabler/icons-react";
+import { IconCash, IconCreditCard, IconQrcode, type TablerIcon } from "@tabler/icons-react";
 import { clsx } from "clsx";
-import {
-  useEffect,
-  useEffectEvent,
-  useRef,
-  useState,
-  type FormEvent,
-  type KeyboardEvent,
-} from "react";
+import { useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
-import { Chip } from "@/components/ui/Chip";
 import { Dialog } from "@/components/ui/Dialog";
 import { Kbd } from "@/components/ui/Kbd";
-import { ResultBox } from "@/components/ui/ResultBox";
-import { TextField } from "@/components/ui/TextField";
+import type { CustomerChoice } from "@/features/credit/customer-choice";
 import { errorMessage } from "@/lib/errors";
 import { isApiError } from "@/lib/http-client";
 import type { CartView } from "../cart";
 import { useCartStore } from "../cart-store";
 import { useCheckout } from "../queries";
+import { readCash } from "./payment/cash";
+import { CashPanel } from "./payment/CashPanel";
+import { CreditPanel } from "./payment/CreditPanel";
+import { PromptPayPanel } from "./payment/PromptPayPanel";
+import { SaleDone } from "./payment/SaleDone";
 
 export interface PaymentDialogProps {
   open: boolean;
@@ -46,7 +33,7 @@ export interface PaymentDialogProps {
   onNewSale: (scanned?: string) => void;
 }
 
-/** Payment dialog (plan.md → Payment dialog). Cash in step 6; PromptPay and Credit in step 7. */
+/** Payment dialog (plan.md → Payment dialog): Cash, PromptPay or Credit, then the success state. */
 export function PaymentDialog(props: PaymentDialogProps) {
   // Mounted only while open: every opening gets a fresh idempotency key and form.
   return props.open ? <PaymentForm {...props} /> : null;
@@ -57,31 +44,65 @@ const METHODS: {
   label: string;
   icon: TablerIcon;
   shortcut: string;
-  ready: boolean;
+  confirm: string;
 }[] = [
-  { method: "CASH", label: "Cash", icon: IconCash, shortcut: "1", ready: true },
-  { method: "PROMPTPAY", label: "PromptPay", icon: IconQrcode, shortcut: "2", ready: false },
-  { method: "CREDIT", label: "Credit", icon: IconCreditCard, shortcut: "3", ready: false },
+  { method: "CASH", label: "Cash", icon: IconCash, shortcut: "1", confirm: "Complete sale" },
+  {
+    method: "PROMPTPAY",
+    label: "PromptPay",
+    icon: IconQrcode,
+    shortcut: "2",
+    confirm: "Save as pending",
+  },
+  {
+    method: "CREDIT",
+    label: "Credit",
+    icon: IconCreditCard,
+    shortcut: "3",
+    confirm: "Add to credit",
+  },
 ];
 
 function PaymentForm({ cart, terminalId, onCancel, onNewSale }: PaymentDialogProps) {
   const [idempotencyKey] = useState(() => crypto.randomUUID());
   const [method, setMethod] = useState<PaymentMethod>("CASH");
-  const [receivedText, setReceivedText] = useState("");
-  const [sale, setSale] = useState<Order | null>(null);
-  const amountRef = useRef<HTMLInputElement>(null);
+  const [cashText, setCashText] = useState("");
+  const [customer, setCustomer] = useState<CustomerChoice | null>(null);
+  const [customerError, setCustomerError] = useState<string>();
+  const [result, setResult] = useState<CheckoutResponse | null>(null);
+  const confirmRef = useRef<HTMLButtonElement>(null);
   const checkout = useCheckout();
   const clearCart = useCartStore((state) => state.clear);
   const { total } = cart.totals;
 
-  // Empty means "paid exactly" — the fastest cash flow: F9, Enter.
-  const received = receivedText.trim() === "" ? total : parseThb(receivedText);
-  const cash = received === null ? null : calculateCash(total, received);
-  const canPay = cash !== null && cash.short === 0 && !checkout.isPending;
+  /** The payment to send, or null while something is missing. */
+  const payment = ((): PaymentInput | null => {
+    if (method === "PROMPTPAY") return { method };
+    if (method === "CREDIT") {
+      if (!customer) return null;
+      return {
+        method,
+        customer:
+          customer.kind === "existing" ? { id: customer.customer.id } : { newName: customer.name },
+      };
+    }
+    const cash = readCash(total, cashText);
+    return cash.ready && cash.received !== null ? { method, cashReceived: cash.received } : null;
+  })();
+  const creditBlocked = method === "CREDIT" && total === 0;
+
+  const switchMethod = (next: PaymentMethod) => {
+    setMethod(next);
+    checkout.reset();
+    // PromptPay has nothing to type: put focus on the confirm button so Enter saves it.
+    if (next === "PROMPTPAY") requestAnimationFrame(() => confirmRef.current?.focus());
+  };
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    if (!canPay || received === null) return;
+    if (method === "CREDIT" && !customer)
+      return setCustomerError("Pick a customer or type a new name");
+    if (!payment || creditBlocked || checkout.isPending) return;
     checkout.mutate(
       {
         idempotencyKey,
@@ -92,28 +113,33 @@ function PaymentForm({ cart, terminalId, onCancel, onNewSale }: PaymentDialogPro
             cart.totals.discountValue > 0
               ? { type: "FIXED", value: cart.totals.discountValue }
               : null,
-          payment: { method: "CASH", cashReceived: received },
+          payment,
           clientCreatedAt: new Date().toISOString(),
         },
       },
       {
-        onSuccess: (order) => {
+        onSuccess: (response) => {
           clearCart(); // the bill is saved: a reload must not show it again
-          setSale(order);
+          setResult(response);
         },
       },
     );
   };
 
-  // 1 / 2 / 3 switch method, when not typing in a field.
+  // 1 / 2 / 3 switch method, when not typing in a field (digits type the cash amount there).
   const onKeyDown = (event: KeyboardEvent) => {
     if (event.target instanceof HTMLInputElement) return;
     const option = METHODS.find((m) => m.shortcut === event.key);
-    if (option?.ready) setMethod(option.method);
+    if (option) {
+      event.preventDefault();
+      switchMethod(option.method);
+    }
   };
 
-  if (sale) return <SaleDone order={sale} onNewSale={onNewSale} />;
-  const itemsLabel = itemCountLabel(cart.itemCount);
+  if (result) return <SaleDone result={result} onNewSale={onNewSale} />;
+
+  const current = METHODS.find((m) => m.method === method) ?? METHODS[0];
+  const itemCount = cart.itemCount;
 
   return (
     <Dialog
@@ -121,7 +147,9 @@ function PaymentForm({ cart, terminalId, onCancel, onNewSale }: PaymentDialogPro
       size="lg"
       title={
         <span className="flex items-baseline justify-between gap-4">
-          <span>Payment · {itemsLabel}</span>
+          <span>
+            Payment · {itemCount.toLocaleString("en-US")} item{itemCount === 1 ? "" : "s"}
+          </span>
           <span className="text-3xl">{formatTHB(total)}</span>
         </span>
       }
@@ -132,8 +160,14 @@ function PaymentForm({ cart, terminalId, onCancel, onNewSale }: PaymentDialogPro
           <Button variant="ghost" onClick={onCancel} disabled={checkout.isPending}>
             Cancel <Kbd className="ml-1">Esc</Kbd>
           </Button>
-          <Button type="submit" size="lg" loading={checkout.isPending} disabled={!canPay}>
-            Complete sale{" "}
+          <Button
+            ref={confirmRef}
+            type="submit"
+            size="lg"
+            loading={checkout.isPending}
+            disabled={(method !== "CREDIT" && !payment) || creditBlocked}
+          >
+            {current?.confirm}{" "}
             <Kbd className="ml-1 border-white/60 bg-transparent text-white">Enter</Kbd>
           </Button>
         </>
@@ -146,51 +180,30 @@ function PaymentForm({ cart, terminalId, onCancel, onNewSale }: PaymentDialogPro
               key={option.method}
               {...option}
               selected={method === option.method}
-              onSelect={setMethod}
+              onSelect={switchMethod}
             />
           ))}
         </div>
 
-        <div className="flex flex-col gap-3">
-          <TextField
-            ref={amountRef}
-            label="Amount received"
-            unit="฿"
-            inputMode="decimal"
-            autoFocus
-            autoComplete="off"
-            placeholder={`${formatSatang(total)} (exact)`}
-            value={receivedText}
-            error={
-              received === null
-                ? "Enter an amount like 100 or 52.50"
-                : cash && cash.short > 0
-                  ? `Short by ${formatTHB(cash.short)}`
-                  : undefined
-            }
-            hint="Leave it empty if the customer paid exactly."
-            onFocus={(event) => event.currentTarget.select()}
-            onChange={(event) => setReceivedText(event.target.value)}
-          />
-          <div className="flex flex-wrap gap-2">
-            {cashQuickAmounts(total).map((amount, index) => (
-              <Chip
-                key={amount}
-                selected={received === amount}
-                onClick={() => {
-                  setReceivedText(index === 0 ? "" : formatSatang(amount).replace(/\.00$/, ""));
-                  amountRef.current?.focus(); // so Enter completes the sale next
-                }}
-              >
-                {index === 0 ? "Exact" : formatSatang(amount).replace(/\.00$/, "")}
-              </Chip>
-            ))}
-          </div>
-        </div>
-
-        <ResultBox label="Change">
-          {cash && cash.short === 0 ? formatTHB(cash.change) : "—"}
-        </ResultBox>
+        {method === "CASH" && <CashPanel total={total} text={cashText} onChange={setCashText} />}
+        {method === "PROMPTPAY" && <PromptPayPanel total={total} />}
+        {method === "CREDIT" &&
+          (creditBlocked ? (
+            <Alert tone="warning">
+              The total is 0.00, so there's nothing to put on credit. Use Cash instead.
+            </Alert>
+          ) : (
+            <CreditPanel
+              total={total}
+              customer={customer}
+              error={customerError}
+              onChange={(choice) => {
+                setCustomer(choice);
+                setCustomerError(undefined);
+                if (choice) requestAnimationFrame(() => confirmRef.current?.focus());
+              }}
+            />
+          ))}
 
         {checkout.isError && <Alert tone="danger">{paymentError(checkout.error)}</Alert>}
       </div>
@@ -198,13 +211,9 @@ function PaymentForm({ cart, terminalId, onCancel, onNewSale }: PaymentDialogPro
   );
 }
 
-function itemCountLabel(count: number) {
-  return `${count.toLocaleString("en-US")} item${count === 1 ? "" : "s"}`;
-}
-
 function paymentError(error: unknown): string {
   if (isApiError(error) && error.isNetwork) {
-    return "Couldn't reach the server, so the sale isn't saved yet. The cart is kept — press Complete sale to try again.";
+    return "Couldn't reach the server, so the sale isn't saved yet. The cart is kept — press the button again to try.";
   }
   return errorMessage(error);
 }
@@ -214,7 +223,6 @@ function MethodCard({
   label,
   icon: Icon,
   shortcut,
-  ready,
   selected,
   onSelect,
 }: (typeof METHODS)[number] & { selected: boolean; onSelect: (method: PaymentMethod) => void }) {
@@ -223,7 +231,6 @@ function MethodCard({
       type="button"
       role="radio"
       aria-checked={selected}
-      disabled={!ready}
       onClick={() => onSelect(method)}
       className={clsx(
         "relative flex h-24 flex-col items-center justify-center gap-1 rounded-2xl border-2 transition-colors",
@@ -231,104 +238,11 @@ function MethodCard({
         selected
           ? "border-primary bg-primary-tint text-primary-dark"
           : "border-border-strong bg-page hover:border-primary",
-        !ready && "cursor-not-allowed opacity-50 hover:border-border-strong",
       )}
     >
       <Kbd className="absolute top-2 left-2">{shortcut}</Kbd>
       <Icon size={28} aria-hidden />
       <span className="font-medium">{label}</span>
-      {!ready && <span className="text-xs text-text-muted">Coming in step 7</span>}
     </button>
-  );
-}
-
-// ---------- Success ----------
-
-const AUTO_CLOSE_SECONDS = 5;
-/** Keys from a barcode scanner arrive within a few ms; a person types much slower. */
-const SCAN_IDLE_MS = 60;
-
-/**
- * Success state (plan.md → Payment dialog → Success). New sale on Enter, Esc, any key, the
- * countdown, or a scan — a scanned barcode is passed on so it becomes the next sale's first item.
- */
-function SaleDone({ order, onNewSale }: { order: Order; onNewSale: (scanned?: string) => void }) {
-  const itemsLabel = itemCountLabel(order.items.reduce((sum, line) => sum + line.qty, 0));
-  const [secondsLeft, setSecondsLeft] = useState(AUTO_CLOSE_SECONDS);
-  const finish = useEffectEvent((scanned?: string) => onNewSale(scanned));
-
-  useEffect(() => {
-    const timer = setInterval(() => setSecondsLeft((s) => s - 1), 1000);
-    return () => clearInterval(timer);
-  }, []);
-  useEffect(() => {
-    if (secondsLeft <= 0) finish();
-  }, [secondsLeft]);
-
-  // Catch keys before anything else: Enter / Esc / any key = new sale; fast keys + Enter = a scan.
-  useEffect(() => {
-    let buffer = "";
-    let idle: ReturnType<typeof setTimeout> | undefined;
-    const onKey = (event: globalThis.KeyboardEvent) => {
-      if (
-        event.key === "Tab" ||
-        event.key === "Shift" ||
-        event.ctrlKey ||
-        event.metaKey ||
-        event.altKey
-      )
-        return;
-      event.preventDefault();
-      event.stopPropagation();
-      clearTimeout(idle);
-      if (event.key === "Enter" || event.key === "Escape") return finish(buffer || undefined);
-      if (event.key.length === 1) buffer += event.key;
-      idle = setTimeout(() => finish(), SCAN_IDLE_MS); // a single key press, not a scan
-    };
-    window.addEventListener("keydown", onKey, true);
-    return () => {
-      window.removeEventListener("keydown", onKey, true);
-      clearTimeout(idle);
-    };
-  }, []);
-
-  return (
-    <Dialog
-      open
-      size="lg"
-      title={`Payment · ${itemsLabel}`}
-      onClose={() => onNewSale()}
-      footer={
-        <>
-          <span className="mr-auto text-sm text-text-muted">
-            Closes in {Math.max(secondsLeft, 0)} s
-          </span>
-          <Button
-            size="lg"
-            autoFocus
-            className="ring-4 ring-primary-tint"
-            onClick={() => onNewSale()}
-          >
-            New sale <Kbd className="ml-1 border-white/60 bg-transparent text-white">Enter</Kbd>
-          </Button>
-        </>
-      }
-    >
-      <div className="flex flex-col items-center gap-4 py-2 text-center">
-        <IconCircleCheckFilled size={64} className="text-success" aria-hidden />
-        <div>
-          <p className="text-2xl font-semibold">Sale completed</p>
-          <p className="text-text-muted">
-            Bill {order.billNo} · Cash · {formatTHB(order.total)}
-          </p>
-        </div>
-        <div className="w-full">
-          <ResultBox label="Give change">{formatTHB(order.changeGiven ?? 0)}</ResultBox>
-          <p className="mt-2 text-sm text-text-muted">
-            Received {formatTHB(order.cashReceived ?? 0)}
-          </p>
-        </div>
-      </div>
-    </Dialog>
   );
 }

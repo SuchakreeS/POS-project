@@ -1,4 +1,4 @@
-import { checkoutInputSchema, IDEMPOTENCY_HEADER } from "@pos/shared";
+import { checkoutInputSchema, IDEMPOTENCY_HEADER, type CheckoutResponse } from "@pos/shared";
 import { Router } from "express";
 import { z } from "zod";
 import { HttpError } from "../../lib/http-error";
@@ -17,6 +17,6 @@ ordersRouter.post("/", validateBody(checkoutInputSchema), async (req, res) => {
   const key = idempotencyKeySchema.safeParse(req.get(IDEMPOTENCY_HEADER));
   if (!key.success) throw HttpError.badRequest("Missing Idempotency-Key header (a UUID).");
 
-  const { order, created } = await orders.checkout(req.body, key.data, requestContext(req));
-  res.status(created ? 201 : 200).json(order);
+  const { created, ...body } = await orders.checkout(req.body, key.data, requestContext(req));
+  res.status(created ? 201 : 200).json(body satisfies CheckoutResponse);
 });

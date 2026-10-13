@@ -42,7 +42,12 @@ export function QtyInput({ label, value, onChange }: QtyInputProps) {
         onChange={(event) => setDraft(event.target.value.replace(/\D/g, ""))}
         onBlur={commit}
         onKeyDown={(event) => {
-          if (event.key === "Enter") event.currentTarget.blur();
+          if (event.key === "Enter") {
+            // Without this, the Enter would also "click" whatever gets focus next — e.g. the
+            // stock question's "Don't add" button, closing it before the cashier sees it.
+            event.preventDefault();
+            event.currentTarget.blur();
+          }
           if (event.key === "Escape") {
             setDraft(null);
             event.currentTarget.blur();

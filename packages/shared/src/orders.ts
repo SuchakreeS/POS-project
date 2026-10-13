@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { customerNameSchema } from "./credit";
 import { discountInputSchema, lineQtySchema, satangSchema } from "./pricing";
 
 /*
@@ -16,12 +17,19 @@ export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
 
 export const IDEMPOTENCY_HEADER = "idempotency-key";
 
-/** Phase 1, step 6: cash. PromptPay and credit join this union in step 7. */
+/** One method per bill in Phase 1 (plan.md → Payments). */
 export const paymentInputSchema = z.discriminatedUnion("method", [
   z.object({
     method: z.literal("CASH"),
     /** What the customer handed over; must cover the total. */
     cashReceived: satangSchema,
+  }),
+  /** Customer scans the printed shop QR; the bill is saved as PENDING until staff check the bank app. */
+  z.object({ method: z.literal("PROMPTPAY") }),
+  /** Added to what the customer owes: an existing customer, or a new one by name. */
+  z.object({
+    method: z.literal("CREDIT"),
+    customer: z.union([z.object({ id: z.uuid() }), z.object({ newName: customerNameSchema })]),
   }),
 ]);
 export type PaymentInput = z.input<typeof paymentInputSchema>;
@@ -65,7 +73,24 @@ export interface Order {
   paymentMethod: PaymentMethod;
   cashReceived: number | null;
   changeGiven: number | null;
+  /** PromptPay bills only. */
+  promptpay: {
+    status: PromptpayStatus;
+    receivedAt: string | null;
+    receivedBy: string | null;
+  } | null;
+  /** Credit bills only. */
+  customer: { id: string; name: string } | null;
   createdAt: string;
+}
+
+export type PromptpayStatus = "PENDING" | "RECEIVED";
+
+/** POST /orders response. */
+export interface CheckoutResponse {
+  order: Order;
+  /** Credit bills: what the customer owes after this bill (for the success screen). */
+  customerBalance: number | null;
 }
 
 export interface Terminal {

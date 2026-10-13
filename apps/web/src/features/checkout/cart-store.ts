@@ -19,6 +19,8 @@ interface CartState {
   selectedId: string | null;
   /** Fixed discount typed by the cashier, satang. Null = no discount. */
   discount: number | null;
+  /** Products the cashier confirmed selling beyond their stock count on this bill (asked once). */
+  overStockOk: string[];
 
   /** +1 (or `by`) for a product; adds the line if new. */
   add(productId: string, by?: number): void;
@@ -27,6 +29,8 @@ interface CartState {
   remove(productId: string): void;
   select(productId: string | null): void;
   setDiscount(discount: number | null): void;
+  /** Don't ask again about this product's stock for the rest of this bill. */
+  allowOverStock(productId: string): void;
   clear(): void;
 }
 
@@ -38,6 +42,7 @@ export const useCartStore = create<CartState>()(
       lines: [],
       selectedId: null,
       discount: null,
+      overStockOk: [],
 
       add: (productId, by = 1) =>
         set((state) => {
@@ -67,12 +72,24 @@ export const useCartStore = create<CartState>()(
 
       setDiscount: (discount) => set({ discount: discount && discount > 0 ? discount : null }),
 
-      clear: () => set({ lines: [], selectedId: null, discount: null }),
+      allowOverStock: (productId) =>
+        set((state) =>
+          state.overStockOk.includes(productId)
+            ? state
+            : { overStockOk: [...state.overStockOk, productId] },
+        ),
+
+      clear: () => set({ lines: [], selectedId: null, discount: null, overStockOk: [] }),
     }),
     {
       name: "pos.cart.v1",
       storage: createJSONStorage(() => localStorage),
-      partialize: ({ lines, selectedId, discount }) => ({ lines, selectedId, discount }),
+      partialize: ({ lines, selectedId, discount, overStockOk }) => ({
+        lines,
+        selectedId,
+        discount,
+        overStockOk,
+      }),
     },
   ),
 );
@@ -84,5 +101,6 @@ function removeLine(state: CartState, productId: string): Partial<CartState> {
     selectedId:
       state.selectedId === productId ? (lines.at(-1)?.productId ?? null) : state.selectedId,
     discount: lines.length === 0 ? null : state.discount,
+    overStockOk: state.overStockOk.filter((id) => id !== productId),
   };
 }

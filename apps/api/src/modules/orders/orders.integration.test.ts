@@ -16,6 +16,7 @@ let headers: Record<string, string>;
 let terminalId: string;
 
 async function cleanup() {
+  // Rows created through this terminal, its products, and customers named "itest …"
   const terminal = await prisma.terminal.findUnique({ where: { code: "ITX" } });
   const orders = terminal
     ? await prisma.order.findMany({ where: { terminalId: terminal.id } })
@@ -24,11 +25,28 @@ async function cleanup() {
   const products = await prisma.product.findMany({ where: { barcode: { startsWith: "ITORD-" } } });
   const productIds = products.map((p) => p.id);
 
-  await prisma.auditLog.deleteMany({ where: { entityId: { in: [...orderIds, ...productIds] } } });
+  const entries = await prisma.creditEntry.findMany({ where: { orderId: { in: orderIds } } });
+  const customers = await prisma.customer.findMany({
+    where: { nameKey: { startsWith: "itest " } },
+  });
+  await prisma.auditLog.deleteMany({
+    where: {
+      entityId: {
+        in: [
+          ...orderIds,
+          ...productIds,
+          ...entries.map((e) => e.id),
+          ...customers.map((c) => c.id),
+        ],
+      },
+    },
+  });
+  await prisma.creditEntry.deleteMany({ where: { id: { in: entries.map((e) => e.id) } } });
   await prisma.stockMovement.deleteMany({ where: { productId: { in: productIds } } });
   await prisma.orderItem.deleteMany({ where: { orderId: { in: orderIds } } });
   await prisma.order.deleteMany({ where: { id: { in: orderIds } } });
   await prisma.product.deleteMany({ where: { id: { in: productIds } } });
+  await prisma.customer.deleteMany({ where: { id: { in: customers.map((c) => c.id) } } });
   if (terminal)
     await prisma.terminal.update({ where: { id: terminal.id }, data: { lastBillSeq: 0 } });
 }
@@ -100,7 +118,8 @@ describe.skipIf(!dbTestsEnabled)("checkout API (database)", () => {
     });
 
     expect(res.status).toBe(201);
-    const order: Order = res.body;
+    const order: Order = res.body.order;
+    expect(res.body.customerBalance).toBeNull();
     expect(order).toMatchObject({
       billNo: "ITX-000001",
       status: "COMPLETED",
@@ -153,7 +172,7 @@ describe.skipIf(!dbTestsEnabled)("checkout API (database)", () => {
       items: [{ productId: water.id, qty: 1 }],
       payment: { method: "CASH", cashReceived: 700 },
     });
-    expect(second.body.billNo).toBe("ITX-000002");
+    expect(second.body.order.billNo).toBe("ITX-000002");
   });
 
   it("uses today's price even if the client shows an old one, and keeps old bills unchanged", async () => {
@@ -168,8 +187,10 @@ describe.skipIf(!dbTestsEnabled)("checkout API (database)", () => {
       payment: { method: "CASH", cashReceived: 1000 },
     });
 
-    expect(second.body.total).toBe(800);
-    const stored = await prisma.orderItem.findFirstOrThrow({ where: { orderId: first.body.id } });
+    expect(second.body.order.total).toBe(800);
+    const stored = await prisma.orderItem.findFirstOrThrow({
+      where: { orderId: first.body.order.id },
+    });
     expect(stored.unitPrice).toBe(700);
   });
 
@@ -180,7 +201,7 @@ describe.skipIf(!dbTestsEnabled)("checkout API (database)", () => {
       discount: { type: "FIXED", value: 8000 },
       payment: { method: "CASH", cashReceived: 0 },
     });
-    expect(res.body).toMatchObject({
+    expect(res.body.order).toMatchObject({
       subtotal: 5000,
       discountValue: 8000,
       discountAmount: 5000,
@@ -201,7 +222,7 @@ describe.skipIf(!dbTestsEnabled)("checkout API (database)", () => {
     const c = await sale(body, key);
 
     expect([a.status, b.status].sort()).toEqual([200, 201]);
-    expect(new Set([a.body.id, b.body.id, c.body.id]).size).toBe(1);
+    expect(new Set([a.body.order.id, b.body.order.id, c.body.order.id]).size).toBe(1);
     expect(c.status).toBe(200);
     expect(await stockOf(water.id)).toBe(9); // cut once
     expect(await prisma.order.count({ where: { terminalId } })).toBe(1);
@@ -243,6 +264,92 @@ describe.skipIf(!dbTestsEnabled)("checkout API (database)", () => {
     expect(
       (await prisma.terminal.findUniqueOrThrow({ where: { id: terminalId } })).lastBillSeq,
     ).toBe(0);
+  });
+
+  it("saves a PromptPay sale as pending, with no cash", async () => {
+    const water = await newProduct("ITORD-1", 700, 10);
+    const res = await sale({
+      items: [{ productId: water.id, qty: 2 }],
+      payment: { method: "PROMPTPAY" },
+    });
+    expect(res.status).toBe(201);
+    expect(res.body.order).toMatchObject({
+      paymentMethod: "PROMPTPAY",
+      total: 1400,
+      cashReceived: null,
+      changeGiven: null,
+      promptpay: { status: "PENDING", receivedAt: null, receivedBy: null },
+      customer: null,
+    });
+    expect(await stockOf(water.id)).toBe(8); // goods left the store: stock is cut now
+  });
+
+  it("puts a sale on credit: new customer by name, then the same customer again", async () => {
+    const water = await newProduct("ITORD-1", 2500, 10);
+
+    const first = await sale({
+      items: [{ productId: water.id, qty: 2 }],
+      payment: { method: "CREDIT", customer: { newName: "  itest   Somchai " } },
+    });
+    expect(first.status).toBe(201);
+    expect(first.body.order.customer).toMatchObject({ name: "itest Somchai" });
+    expect(first.body.customerBalance).toBe(5000);
+
+    // Same name with different case/spaces → same customer, balance adds up
+    const second = await sale({
+      items: [{ productId: water.id, qty: 1 }],
+      payment: { method: "CREDIT", customer: { newName: "ITEST somchai" } },
+    });
+    expect(second.body.order.customer.id).toBe(first.body.order.customer.id);
+    expect(second.body.customerBalance).toBe(7500);
+
+    const byId = await sale({
+      items: [{ productId: water.id, qty: 1 }],
+      payment: { method: "CREDIT", customer: { id: first.body.order.customer.id } },
+    });
+    expect(byId.body.customerBalance).toBe(10000);
+
+    const entries = await prisma.creditEntry.findMany({
+      where: { customerId: first.body.order.customer.id },
+    });
+    expect(entries.map((e) => [e.type, e.amount]).sort()).toEqual([
+      ["CHARGE", 2500],
+      ["CHARGE", 2500],
+      ["CHARGE", 5000],
+    ]);
+    const audit = await prisma.auditLog.findMany({
+      where: {
+        action: { in: ["CUSTOMER_CREATE", "CREDIT_CHARGE"] },
+        userName: `${USER_PREFIX}nok`,
+      },
+      orderBy: { createdAt: "asc" },
+    });
+    expect(audit.map((a) => a.action)).toEqual([
+      "CUSTOMER_CREATE",
+      "CREDIT_CHARGE",
+      "CREDIT_CHARGE",
+      "CREDIT_CHARGE",
+    ]);
+    expect(audit[1]?.after).toMatchObject({ amount: 5000, balanceBefore: 0, balanceAfter: 5000 });
+
+    const search = await request(app)
+      .get("/credit/customers")
+      .query({ search: "ITEST SOMCH" })
+      .set(headers);
+    expect(search.body.items).toEqual([
+      expect.objectContaining({ name: "itest Somchai", balance: 10000 }),
+    ]);
+  });
+
+  it("refuses credit for a free bill", async () => {
+    const water = await newProduct("ITORD-1", 500, 10);
+    const res = await sale({
+      items: [{ productId: water.id, qty: 1 }],
+      discount: { type: "FIXED", value: 500 },
+      payment: { method: "CREDIT", customer: { newName: "itest Free" } },
+    });
+    expect(res.status).toBe(400);
+    expect(await prisma.customer.count({ where: { nameKey: "itest free" } })).toBe(0);
   });
 
   it("lists active terminals", async () => {

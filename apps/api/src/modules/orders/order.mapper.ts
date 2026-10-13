@@ -5,6 +5,11 @@ export const orderInclude = {
   items: { orderBy: { id: "asc" } },
   terminal: { select: { code: true } },
   cashier: { select: { displayName: true } },
+  promptpayReceivedBy: { select: { displayName: true } },
+  creditEntries: {
+    where: { type: "CHARGE" },
+    select: { customer: { select: { id: true, name: true } } },
+  },
 } as const satisfies Prisma.OrderInclude;
 
 export type OrderRow = Prisma.OrderGetPayload<{ include: typeof orderInclude }>;
@@ -30,6 +35,14 @@ export function toOrder(row: OrderRow): Order {
     paymentMethod: row.paymentMethod,
     cashReceived: row.cashReceived,
     changeGiven: row.changeGiven,
+    promptpay: row.promptpayStatus
+      ? {
+          status: row.promptpayStatus,
+          receivedAt: row.promptpayReceivedAt?.toISOString() ?? null,
+          receivedBy: row.promptpayReceivedBy?.displayName ?? null,
+        }
+      : null,
+    customer: row.creditEntries[0]?.customer ?? null,
     createdAt: row.createdAt.toISOString(),
   };
 }
