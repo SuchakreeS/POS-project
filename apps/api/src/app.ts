@@ -2,6 +2,7 @@ import cookieParser from "cookie-parser";
 import cors from "cors";
 import express from "express";
 import helmet from "helmet";
+import { IDEMPOTENCY_HEADER } from "@pos/shared";
 import { AUTH } from "./config";
 import { env } from "./env";
 import { errorHandler, notFound } from "./middleware/error-handler";
@@ -16,7 +17,13 @@ export function createApp() {
     cors({
       origin: env.CORS_ORIGIN,
       credentials: true, // refresh-token cookie (SameSite=None; Secure in production)
-      allowedHeaders: ["Content-Type", "Authorization", AUTH.clientHeader, "x-terminal-id"],
+      allowedHeaders: [
+        "Content-Type",
+        "Authorization",
+        AUTH.clientHeader,
+        "x-terminal-id",
+        IDEMPOTENCY_HEADER,
+      ],
     }),
   );
   app.use(express.json({ limit: "1mb" }));

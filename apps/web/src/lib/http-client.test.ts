@@ -156,3 +156,19 @@ describe("createHttpClient", () => {
     await expect(client.post("/auth/logout", undefined, { auth: false })).resolves.toBeUndefined();
   });
 });
+
+describe("per-request headers", () => {
+  it("adds them to the client's headers", async () => {
+    const fetchMock = vi.fn<typeof fetch>(async () => json(201, {}));
+    const client = createHttpClient({
+      baseUrl: "http://api.test",
+      headers: { "x-pos-client": "web" },
+      fetch: fetchMock,
+    });
+    await client.post("/orders", {}, { headers: { "Idempotency-Key": "k1" } });
+    expect(fetchMock.mock.calls[0]?.[1]?.headers).toMatchObject({
+      "x-pos-client": "web",
+      "Idempotency-Key": "k1",
+    });
+  });
+});

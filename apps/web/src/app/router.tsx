@@ -25,11 +25,16 @@ export const router = createBrowserRouter([
           {
             element: <RequireAuth />,
             children: [
+              // Checkout has its own full-screen layout: cart on the right, nav in a slide-in drawer.
+              {
+                path: "checkout",
+                lazy: () =>
+                  import("@/pages/CheckoutPage").then((m) => ({ Component: m.CheckoutPage })),
+              },
               {
                 element: <AppLayout />,
                 children: [
                   { index: true, element: <Navigate to={HOME_PATH} replace /> },
-                  { path: "checkout", element: <ComingSoonPage title="Checkout" step={6} /> },
                   {
                     path: "stock",
                     lazy: () =>

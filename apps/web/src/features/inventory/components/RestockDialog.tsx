@@ -10,7 +10,11 @@ import { TextField } from "@/components/ui/TextField";
 import { toast } from "@/components/ui/toast";
 import { useDiscardConfirm } from "@/components/ui/useDiscardConfirm";
 import { AddItemDialog } from "@/features/catalog/components/AddItemDialog";
-import { ProductSearchBox, type PickSource } from "@/features/catalog/components/ProductSearchBox";
+import {
+  ProductSearchBox,
+  type PickSource,
+  type ProductSearchBoxHandle,
+} from "@/features/catalog/components/ProductSearchBox";
 import { useProducts } from "@/features/catalog/queries";
 import { errorMessage } from "@/lib/errors";
 import { useRestock } from "../queries";
@@ -49,7 +53,7 @@ function RestockForm({ onClose, initialProductId }: RestockDialogProps) {
   const [addingBarcode, setAddingBarcode] = useState<string | null>(null);
   /** Row whose quantity box gets focus once the list has re-rendered. */
   const focusQtyOf = useRef<string | null>(null);
-  const searchRef = useRef<HTMLInputElement>(null);
+  const searchRef = useRef<ProductSearchBoxHandle>(null);
   const qtyRefs = useRef(new Map<string, HTMLInputElement>());
 
   const summary = summarize(list);
@@ -117,7 +121,7 @@ function RestockForm({ onClose, initialProductId }: RestockDialogProps) {
             products={products}
             onPick={add}
             onAddNew={setAddingBarcode}
-            inputRef={searchRef}
+            handleRef={searchRef}
             autoFocus={!initialProductId}
           />
 

@@ -1,7 +1,7 @@
 import { barcodeSchema, formatTHB, type Product } from "@pos/shared";
 import { IconAlertCircle, IconPlus } from "@tabler/icons-react";
 import { clsx } from "clsx";
-import { useId, useState, type KeyboardEvent, type Ref } from "react";
+import { useId, useImperativeHandle, useRef, useState, type KeyboardEvent, type Ref } from "react";
 import { Button } from "@/components/ui/Button";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { errorBeep } from "@/lib/beep";
@@ -11,6 +11,12 @@ import { matchesSearch } from "../stock-filter";
 import { StockBadge } from "./StockBadge";
 
 export type PickSource = "scan" | "search";
+
+/** Lets a page drive the box: focus it, or feed it a barcode captured elsewhere. */
+export interface ProductSearchBoxHandle {
+  focus(): void;
+  scan(code: string): void;
+}
 
 interface ProductSearchBoxProps {
   /** Every loaded product (active and turned off). Suggestions show active ones only. */
@@ -22,7 +28,14 @@ interface ProductSearchBoxProps {
   label?: string;
   placeholder?: string;
   autoFocus?: boolean;
-  inputRef?: Ref<HTMLInputElement>;
+  /** Focus it or feed it a scan from outside (see ProductSearchBoxHandle). */
+  handleRef?: Ref<ProductSearchBoxHandle>;
+  /**
+   * Show matches as a list under the box (Restock). Checkout turns this off and filters its
+   * product grid instead (via onQueryChange); there Enter adds an item only when exactly one matches.
+   */
+  showSuggestions?: boolean;
+  onQueryChange?: (query: string) => void;
 }
 
 const MAX_SUGGESTIONS = 6;
@@ -38,7 +51,9 @@ export function ProductSearchBox({
   label = "Scan or search items",
   placeholder = "Scan a barcode or type a name",
   autoFocus,
-  inputRef,
+  handleRef,
+  showSuggestions = true,
+  onQueryChange,
 }: ProductSearchBoxProps) {
   const listId = useId();
   const [query, setQuery] = useState("");
@@ -53,8 +68,13 @@ export function ProductSearchBox({
         .slice(0, MAX_SUGGESTIONS)
     : [];
 
+  const changeQuery = (value: string) => {
+    setQuery(value);
+    onQueryChange?.(value);
+  };
+
   const reset = () => {
-    setQuery("");
+    changeQuery("");
     setActive(0);
     setNotFound(null);
     setProblem(null);
@@ -64,7 +84,7 @@ export function ProductSearchBox({
     if (!product.isActive) {
       errorBeep();
       setProblem(`${product.name} is turned off. Turn it back on in Stock first.`);
-      setQuery("");
+      changeQuery("");
       return;
     }
     reset();
@@ -79,7 +99,7 @@ export function ProductSearchBox({
       if (!isApiError(error) || error.status !== 404) throw error;
       errorBeep();
       setNotFound(code);
-      setQuery("");
+      changeQuery("");
     } finally {
       setLooking(false);
     }
@@ -102,34 +122,53 @@ export function ProductSearchBox({
     }
     if (event.key !== "Enter") return;
     event.preventDefault();
+    submit(query, true);
+  };
 
-    const code = query.trim();
+  /** Enter: exact barcode → that item; else the highlighted match; else ask the API about the barcode. */
+  const submit = (text: string, allowMatches: boolean) => {
+    const code = text.trim();
     if (!code || looking) return;
     const exact = products.find((product) => product.barcode?.toLowerCase() === code.toLowerCase());
     if (exact) return pick(exact, "scan");
-    const suggestion = suggestions[active];
+    const suggestion = !allowMatches
+      ? undefined
+      : showSuggestions
+        ? suggestions[active]
+        : suggestions.length === 1
+          ? suggestions[0]
+          : undefined;
     if (suggestion) return pick(suggestion, "search");
     if (barcodeSchema.safeParse(code).success) void lookUpBarcode(code);
   };
 
-  const activeId = suggestions[active] ? `${listId}-${active}` : undefined;
+  const ownInput = useRef<HTMLInputElement>(null);
+  useImperativeHandle(handleRef, () => ({
+    focus: () => ownInput.current?.focus(),
+    scan: (code) => {
+      ownInput.current?.focus();
+      submit(code, false);
+    },
+  }));
+
+  const activeId = showSuggestions && suggestions[active] ? `${listId}-${active}` : undefined;
 
   return (
     <div className="flex flex-col gap-2">
       <div className={clsx(notFound && "[&_input]:border-danger")}>
         <SearchInput
-          ref={inputRef}
+          ref={ownInput}
           label={label}
           placeholder={placeholder}
           value={query}
           autoFocus={autoFocus}
           autoComplete="off"
           role="combobox"
-          aria-expanded={suggestions.length > 0}
+          aria-expanded={showSuggestions && suggestions.length > 0}
           aria-controls={listId}
           aria-activedescendant={activeId}
           onChange={(value) => {
-            setQuery(value);
+            changeQuery(value);
             setActive(0);
             setProblem(null);
           }}
@@ -137,7 +176,7 @@ export function ProductSearchBox({
         />
       </div>
 
-      {suggestions.length > 0 && (
+      {showSuggestions && suggestions.length > 0 && (
         <ul
           id={listId}
           role="listbox"

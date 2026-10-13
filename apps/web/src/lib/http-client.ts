@@ -27,6 +27,8 @@ export interface RequestOptions {
   signal?: AbortSignal;
   /** Send the access token and refresh it once on 401. Default true. */
   auth?: boolean;
+  /** Extra headers for this request (e.g. Idempotency-Key). */
+  headers?: Record<string, string>;
 }
 
 /** How the client plugs into the auth layer. Kept as callbacks so this file knows nothing about stores. */
@@ -53,7 +55,7 @@ export function createHttpClient(options: HttpClientOptions) {
   const doFetch = options.fetch ?? ((...args: Parameters<typeof fetch>) => fetch(...args));
 
   async function send(path: string, init: RequestOptions, token: string | null): Promise<Response> {
-    const headers: Record<string, string> = { ...options.headers };
+    const headers: Record<string, string> = { ...options.headers, ...init.headers };
     if (init.body !== undefined) headers["Content-Type"] = "application/json";
     if (token) headers.Authorization = `Bearer ${token}`;
 

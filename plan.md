@@ -361,8 +361,11 @@ Inventory
                                   (newest first, with stockAfter per row)
   (Low stock: the Stock page's Low chip uses the product list; reports get their own query in step 11)
 
+Terminals
+  GET    /terminals               (active checkout devices; the PC remembers its own)
+
 Orders
-  POST   /orders                  (checkout, requires Idempotency-Key header)
+  POST   /orders                  (checkout, requires Idempotency-Key header; same key = same bill)
   GET    /orders?from=&to=&method=&status=&promptpayStatus=
   GET    /orders/:id
   POST   /orders/:id/void         (reason required)
@@ -888,8 +891,11 @@ Use the same token names for Figma color variables so design and code match.
   - [x] API: restock (one transaction, same item twice is added up, one STOCK_RESTOCK entry listing every row), adjust (row locked, signed ADJUST movement, reason + note, STOCK_ADJUST before → after; going below 0 allowed, a count that changes nothing is refused), movement history (stock-after from a running total over all movements, so it stays right when filtered; cursor paging). DB integration tests.
   - [x] Web: Restock dialog (scan or type a name, repeat scan +1, unknown barcode → Add as new item and it joins the list, Now / Add / New, note, discard confirm), Adjust stock (Remove / Add / Set count, reason chips, result box, below-0 warning), Movement history (filters, grouped by day, Load older). Opened from the top Restock button, row Restock link, row menu and Edit item's "Restock · Adjust" links.
   - Reusable for checkout (step 6): `ProductSearchBox` (scan / search, unknown-barcode banner + beep), `ItemCard`, `StockBadge`.
-- [ ] **6. Checkout + cash**: cart store, checkout transaction, idempotency, bill numbers, audit log
-  - Checkout gets its own layout without the fixed sidebar: hamburger that slides the same nav in from the right (reuse `app/navigation.ts` and the Sidebar's nav list). Until then the placeholder uses the normal layout.
+- [x] **6. Checkout + cash**: cart store, checkout transaction, idempotency, bill numbers, audit log
+  - [x] API: `POST /orders` in one transaction — bill number from the terminal's counter (failed sales don't use up numbers), today's prices snapshotted, totals and discount cap computed on the server, cash short refused, SALE movements (below 0 allowed), ORDER_CREATE + DISCOUNT_APPLIED. Same Idempotency-Key (even two at once) returns the same bill. `GET /terminals`. DB integration tests.
+  - [x] Web: Checkout page with its own layout (scan box + category chips + product grid, "Current bill" panel, nav in a slide-in drawer from the right). Cart keeps only ids + quantities and is saved in local storage (survives reload / lost connection). Scan +1, typing anywhere lands in the scan box, unknown barcode banner + beep + Add as new item. − qty + with typing, Del removes the selected line, Clear bill (confirm). Discount popover (F4, chips 5/10/20/50, capped preview). Payment dialog: Cash; PromptPay / Credit cards shown but disabled until step 7.
+  - Decisions made while building: an **empty "Amount received" means paid exactly** (F9 → Enter); the 1 / 2 / 3 method keys work when the cursor isn't in the amount field (digits type the amount there); a barcode scanned on the success screen starts the next sale with that item; the terminal is the first active one until Settings (step 10) lets an admin pick it per PC.
+  - "View bill" on the success screen comes with the Orders page (step 9).
 - [ ] **7. PromptPay + credit payment**: PromptPay as pending at checkout, PromptPay check page (mark received / undo), credit charge at checkout
 - [ ] **8. Credit page**: balances, history, repayments
 - [ ] **9. Orders + void**: history, filters, void transaction
