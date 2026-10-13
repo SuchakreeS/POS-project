@@ -356,9 +356,10 @@ Settings
 
 Inventory
   POST   /inventory/restock       (body: items[{productId, qty}], note?; one transaction)
-  POST   /inventory/adjust
-  GET    /inventory/movements?productId=&from=&to=
-  GET    /inventory/low-stock
+  POST   /inventory/adjust        (body: productId, mode REMOVE|ADD|SET, qty, reason, note?)
+  GET    /inventory/movements?productId=&filter=all|sales|restock|adjust&cursor=&limit=
+                                  (newest first, with stockAfter per row)
+  (Low stock: the Stock page's Low chip uses the product list; reports get their own query in step 11)
 
 Orders
   POST   /orders                  (checkout, requires Idempotency-Key header)
@@ -883,7 +884,10 @@ Use the same token names for Figma color variables so design and code match.
   - [x] Web: Stock page (search + scan, All / Low / Out / Turned off chips with counts, category filter, Out → Low → name order), Add new item (live preview, + New category, Save and add another, discard confirm), Edit item, Deactivate / Turn back on. Filtering is client-side for now (fine for a few hundred items; the API already supports `?search=`).
   - [x] `pnpm user:create` / `pnpm user:reset-password` terminal commands (audit logged as "Terminal (CLI)").
   - Restock, Adjust stock and Movement history (button, row link and menu items) arrive in step 5.
-- [ ] **5. Inventory**: batch restock modal, adjust, movements, low stock
+- [x] **5. Inventory**: batch restock modal, adjust, movements, low stock
+  - [x] API: restock (one transaction, same item twice is added up, one STOCK_RESTOCK entry listing every row), adjust (row locked, signed ADJUST movement, reason + note, STOCK_ADJUST before → after; going below 0 allowed, a count that changes nothing is refused), movement history (stock-after from a running total over all movements, so it stays right when filtered; cursor paging). DB integration tests.
+  - [x] Web: Restock dialog (scan or type a name, repeat scan +1, unknown barcode → Add as new item and it joins the list, Now / Add / New, note, discard confirm), Adjust stock (Remove / Add / Set count, reason chips, result box, below-0 warning), Movement history (filters, grouped by day, Load older). Opened from the top Restock button, row Restock link, row menu and Edit item's "Restock · Adjust" links.
+  - Reusable for checkout (step 6): `ProductSearchBox` (scan / search, unknown-barcode banner + beep), `ItemCard`, `StockBadge`.
 - [ ] **6. Checkout + cash**: cart store, checkout transaction, idempotency, bill numbers, audit log
   - Checkout gets its own layout without the fixed sidebar: hamburger that slides the same nav in from the right (reuse `app/navigation.ts` and the Sidebar's nav list). Until then the placeholder uses the normal layout.
 - [ ] **7. PromptPay + credit payment**: PromptPay as pending at checkout, PromptPay check page (mark received / undo), credit charge at checkout
@@ -935,7 +939,7 @@ Use the same token names for Figma color variables so design and code match.
 - [x] States and feedback: discount input, unknown barcode, empty states, loading, no internet, toasts, confirm dialogs, session expired, no permission (approved, specced in section 9)
 - [ ] Restock modal as real Figma layers (currently a pasted image)
 - [ ] Small fixes: cart Subtotal → Discount → Total order; login labels above fields
-- [ ] Build Adjust stock and Movement history in Figma (approved and specced in section 9; Figma build paused by the Starter plan's MCP limit)
+- [ ] Build Adjust stock and Movement history in Figma (optional now: both are built in code in step 5, which is the source of truth)
 
 ### Needed later (by build step 11)
 - [ ] Choose how the auto report is triggered (paid Render / Render Cron Job / Supabase pg_cron)

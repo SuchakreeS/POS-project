@@ -5,6 +5,7 @@ import { ConfirmDialog } from "./ConfirmDialog";
 /**
  * Ask before closing a form with unsaved changes (plan.md → Confirm dialogs → Discard work).
  * Use `requestClose` for ✕ / Esc / Cancel and render `confirm` next to the form.
+ * `closeThen(next)` closes the same way, then runs `next` — e.g. to open another dialog in its place.
  */
 export function useDiscardConfirm({
   dirty,
@@ -17,26 +18,34 @@ export function useDiscardConfirm({
   title?: string;
   description?: string;
 }) {
-  const [asking, setAsking] = useState(false);
+  // While asking: what to run after closing (a function in state must be wrapped in an object).
+  const [asking, setAsking] = useState<{ then?: () => void } | null>(null);
 
-  const requestClose = () => (dirty ? setAsking(true) : onClose());
+  const closeThen = (then?: () => void) => {
+    if (dirty) return setAsking({ then });
+    onClose();
+    then?.();
+  };
+  const requestClose = () => closeThen();
 
   const confirm = (
     <ConfirmDialog
-      open={asking}
+      open={asking !== null}
       icon={IconAlertTriangle}
       title={title}
       description={description}
       cancelLabel="Keep editing"
       confirmLabel="Discard"
       destructive
-      onCancel={() => setAsking(false)}
+      onCancel={() => setAsking(null)}
       onConfirm={() => {
-        setAsking(false);
+        const then = asking?.then;
+        setAsking(null);
         onClose();
+        then?.();
       }}
     />
   );
 
-  return { requestClose, confirm };
+  return { requestClose, closeThen, confirm };
 }

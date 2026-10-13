@@ -36,17 +36,26 @@ export function useCategories() {
   });
 }
 
-/** Put a saved product into the caches right away, then refetch lists in the background. */
-function storeProduct(queryClient: QueryClient, product: Product) {
-  queryClient.setQueryData(catalogKeys.product(product.id), product);
+/**
+ * Put saved products into the caches right away (the table updates instantly), then refetch
+ * the lists in the background. Also used after Restock and Adjust stock.
+ */
+export function storeProducts(queryClient: QueryClient, products: readonly Product[]) {
+  for (const product of products)
+    queryClient.setQueryData(catalogKeys.product(product.id), product);
   queryClient.setQueryData<Product[]>(catalogKeys.products, (list) => {
     if (!list) return list;
-    const index = list.findIndex((item) => item.id === product.id);
-    return index === -1 ? [...list, product] : list.with(index, product);
+    const byId = new Map(products.map((product) => [product.id, product]));
+    const updated = list.map((item) => byId.get(item.id) ?? item);
+    const added = products.filter((product) => !list.some((item) => item.id === product.id));
+    return [...updated, ...added];
   });
   void queryClient.invalidateQueries({ queryKey: catalogKeys.products });
   void queryClient.invalidateQueries({ queryKey: catalogKeys.categories }); // product counts
 }
+
+const storeProduct = (queryClient: QueryClient, product: Product) =>
+  storeProducts(queryClient, [product]);
 
 export function useCreateProduct() {
   const queryClient = useQueryClient();

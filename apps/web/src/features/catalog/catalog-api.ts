@@ -17,6 +17,10 @@ export const catalogApi = {
 
   getProduct: (id: string, signal?: AbortSignal) => api.get<Product>(`/products/${id}`, { signal }),
 
+  /** Exact barcode (404 if unknown). */
+  getByBarcode: (barcode: string) =>
+    api.get<Product>(`/products/barcode/${encodeURIComponent(barcode)}`),
+
   createProduct: (input: ProductCreateInput) => api.post<Product>("/products", input),
 
   updateProduct: (id: string, input: ProductUpdateInput) =>

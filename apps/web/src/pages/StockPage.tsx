@@ -1,6 +1,9 @@
 import { barcodeSchema, formatTHB, type Product } from "@pos/shared";
 import {
+  IconAdjustments,
   IconDots,
+  IconHistory,
+  IconTruckDelivery,
   IconEyeOff,
   IconPackageOff,
   IconPencil,
@@ -17,6 +20,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Chip } from "@/components/ui/Chip";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { LinkButton } from "@/components/ui/LinkButton";
 import { Menu, MenuItem, MenuSeparator } from "@/components/ui/Menu";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { Select } from "@/components/ui/Select";
@@ -32,6 +36,9 @@ import {
   type StockFilter,
   type StockView,
 } from "@/features/catalog/stock-filter";
+import { AdjustStockDialog } from "@/features/inventory/components/AdjustStockDialog";
+import { MovementHistoryDialog } from "@/features/inventory/components/MovementHistoryDialog";
+import { RestockDialog } from "@/features/inventory/components/RestockDialog";
 import { useShopSettings } from "@/features/settings/queries";
 import { errorMessage } from "@/lib/errors";
 
@@ -49,9 +56,9 @@ export function StockPage() {
   useShopSettings(); // warm the cache: Add new item pre-fills the low-stock alert from it
 
   const [filter, setFilter] = useState<StockFilter>({ search: "", view: "all", category: "" });
-  const [adding, setAdding] = useState<{ barcode?: string } | null>(null);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [statusTarget, setStatusTarget] = useState<Product | null>(null);
+  const [dialog, setDialog] = useState<StockDialog | null>(null);
+  const close = () => setDialog(null);
+  const open = (next: StockDialog) => () => setDialog(next);
 
   const { rows, counts } = filterStock(products.data ?? [], filter);
   const update = (change: Partial<StockFilter>) =>
@@ -68,13 +75,21 @@ export function StockPage() {
         title="Stock"
         description="Every item you sell, and how many are left"
         actions={
-          <Button
-            variant="secondary"
-            icon={<IconPlus size={18} aria-hidden />}
-            onClick={() => setAdding({})}
-          >
-            Add new item
-          </Button>
+          <>
+            <Button
+              variant="secondary"
+              icon={<IconPlus size={18} aria-hidden />}
+              onClick={open({ kind: "add" })}
+            >
+              Add new item
+            </Button>
+            <Button
+              icon={<IconTruckDelivery size={18} aria-hidden />}
+              onClick={open({ kind: "restock" })}
+            >
+              Restock
+            </Button>
+          </>
         }
       />
 
@@ -135,22 +150,23 @@ export function StockPage() {
         <StockTable
           loading={products.isPending}
           rows={rows}
-          onEdit={(product) => setEditingId(product.id)}
-          onToggleActive={setStatusTarget}
+          onAction={(kind, product) =>
+            setDialog(kind === "status" ? { kind, product } : { kind, productId: product.id })
+          }
           empty={
             (products.data?.length ?? 0) === 0 ? (
               <EmptyState
                 icon={IconPackageOff}
                 title="No items yet"
                 description="Add your first item to start selling."
-                action={<AddButton onClick={() => setAdding({})} />}
+                action={<AddButton onClick={open({ kind: "add" })} />}
               />
             ) : filter.search ? (
               <EmptyState
                 icon={IconSearch}
                 title={`No items match “${filter.search.trim()}”`}
                 description="Check the spelling or scan it again."
-                action={<AddButton onClick={() => setAdding({ barcode: searchAsBarcode })} />}
+                action={<AddButton onClick={open({ kind: "add", barcode: searchAsBarcode })} />}
               />
             ) : (
               <EmptyState icon={IconPackageOff} title={EMPTY_VIEW_TITLES[filter.view]} />
@@ -160,15 +176,45 @@ export function StockPage() {
       )}
 
       <AddItemDialog
-        open={adding !== null}
-        initialBarcode={adding?.barcode}
-        onClose={() => setAdding(null)}
+        open={dialog?.kind === "add"}
+        initialBarcode={dialog?.kind === "add" ? dialog.barcode : undefined}
+        onClose={close}
       />
-      <EditItemDialog productId={editingId} onClose={() => setEditingId(null)} />
-      <DeactivateItemDialog product={statusTarget} onClose={() => setStatusTarget(null)} />
+      <EditItemDialog
+        productId={dialog?.kind === "edit" ? dialog.productId : null}
+        onClose={close}
+        onRestock={(productId) => setDialog({ kind: "restock", productId })}
+        onAdjust={(productId) => setDialog({ kind: "adjust", productId })}
+      />
+      <RestockDialog
+        open={dialog?.kind === "restock"}
+        initialProductId={dialog?.kind === "restock" ? dialog.productId : null}
+        onClose={close}
+      />
+      <AdjustStockDialog
+        productId={dialog?.kind === "adjust" ? dialog.productId : null}
+        onClose={close}
+      />
+      <MovementHistoryDialog
+        productId={dialog?.kind === "history" ? dialog.productId : null}
+        onClose={close}
+      />
+      <DeactivateItemDialog
+        product={dialog?.kind === "status" ? dialog.product : null}
+        onClose={close}
+      />
     </>
   );
 }
+
+/** One dialog at a time; each item dialog is standalone and only needs the product id. */
+type StockDialog =
+  | { kind: "add"; barcode?: string }
+  | { kind: "restock"; productId?: string }
+  | { kind: "edit" | "adjust" | "history"; productId: string }
+  | { kind: "status"; product: Product };
+
+type RowAction = "edit" | "restock" | "adjust" | "history" | "status";
 
 const EMPTY_VIEW_TITLES: Record<StockView, string> = {
   all: "No items in this category",
@@ -189,12 +235,11 @@ interface StockTableProps {
   loading: boolean;
   rows: Product[];
   empty: ReactNode;
-  onEdit: (product: Product) => void;
-  onToggleActive: (product: Product) => void;
+  onAction: (action: RowAction, product: Product) => void;
 }
 
 /** A real <table> so header and rows always share column widths (plan.md → Stock page → Alignment). */
-function StockTable({ loading, rows, empty, onEdit, onToggleActive }: StockTableProps) {
+function StockTable({ loading, rows, empty, onAction }: StockTableProps) {
   if (!loading && rows.length === 0)
     return <div className="rounded-2xl border-2 border-border">{empty}</div>;
 
@@ -205,7 +250,7 @@ function StockTable({ loading, rows, empty, onEdit, onToggleActive }: StockTable
         <col className="w-40" />
         <col className="w-40" />
         <col className="w-32" />
-        <col className="w-16" />
+        <col className="w-36" />
       </colgroup>
       <thead>
         <tr className="border-b-2 border-border text-left text-sm font-medium text-text-muted">
@@ -246,12 +291,7 @@ function StockTable({ loading, rows, empty, onEdit, onToggleActive }: StockTable
               </tr>
             ))
           : rows.map((product) => (
-              <StockRow
-                key={product.id}
-                product={product}
-                onEdit={onEdit}
-                onToggleActive={onToggleActive}
-              />
+              <StockRow key={product.id} product={product} onAction={onAction} />
             ))}
       </tbody>
     </table>
@@ -260,13 +300,12 @@ function StockTable({ loading, rows, empty, onEdit, onToggleActive }: StockTable
 
 function StockRow({
   product,
-  onEdit,
-  onToggleActive,
+  onAction,
 }: {
   product: Product;
-  onEdit: (product: Product) => void;
-  onToggleActive: (product: Product) => void;
+  onAction: (action: RowAction, product: Product) => void;
 }) {
+  const act = (action: RowAction) => () => onAction(action, product);
   return (
     <tr
       className={clsx(
@@ -277,7 +316,7 @@ function StockRow({
       <td className="px-3 py-2">
         <button
           type="button"
-          onClick={() => onEdit(product)}
+          onClick={act("edit")}
           title={product.name}
           className="block max-w-full truncate rounded text-left font-medium hover:text-primary hover:underline focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
         >
@@ -297,31 +336,40 @@ function StockRow({
       </td>
       <td className="px-3 text-right font-semibold">{formatTHB(product.price)}</td>
       <td className="px-3 text-right">
-        <Menu
-          trigger={
-            <button
-              type="button"
-              aria-label={`Actions for ${product.name}`}
-              className="inline-flex size-9 items-center justify-center rounded-full text-text-soft hover:bg-hover focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none data-[state=open]:bg-hover"
-            >
-              <IconDots size={20} aria-hidden />
-            </button>
-          }
-        >
-          <MenuItem icon={IconPencil} onSelect={() => onEdit(product)}>
-            Edit item
-          </MenuItem>
-          <MenuSeparator />
-          {product.isActive ? (
-            <MenuItem icon={IconEyeOff} danger onSelect={() => onToggleActive(product)}>
-              Deactivate item
+        <span className="inline-flex items-center gap-2">
+          {product.isActive && <LinkButton onClick={act("restock")}>Restock</LinkButton>}
+          <Menu
+            trigger={
+              <button
+                type="button"
+                aria-label={`Actions for ${product.name}`}
+                className="inline-flex size-9 items-center justify-center rounded-full text-text-soft hover:bg-hover focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none data-[state=open]:bg-hover"
+              >
+                <IconDots size={20} aria-hidden />
+              </button>
+            }
+          >
+            <MenuItem icon={IconPencil} onSelect={act("edit")}>
+              Edit item
             </MenuItem>
-          ) : (
-            <MenuItem icon={IconPower} onSelect={() => onToggleActive(product)}>
-              Turn back on
+            <MenuItem icon={IconAdjustments} onSelect={act("adjust")}>
+              Adjust stock
             </MenuItem>
-          )}
-        </Menu>
+            <MenuItem icon={IconHistory} onSelect={act("history")}>
+              Movement history
+            </MenuItem>
+            <MenuSeparator />
+            {product.isActive ? (
+              <MenuItem icon={IconEyeOff} danger onSelect={act("status")}>
+                Deactivate item
+              </MenuItem>
+            ) : (
+              <MenuItem icon={IconPower} onSelect={act("status")}>
+                Turn back on
+              </MenuItem>
+            )}
+          </Menu>
+        </span>
       </td>
     </tr>
   );

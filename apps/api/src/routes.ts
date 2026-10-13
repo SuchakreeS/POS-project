@@ -2,6 +2,7 @@ import type { Express } from "express";
 import { authRouter } from "./modules/auth/auth.routes";
 import { categoriesRouter } from "./modules/categories/categories.routes";
 import { healthRouter } from "./modules/health/health.routes";
+import { inventoryRouter } from "./modules/inventory/inventory.routes";
 import { productsRouter } from "./modules/products/products.routes";
 import { settingsRouter } from "./modules/settings/settings.routes";
 
@@ -11,5 +12,6 @@ export function registerRoutes(app: Express) {
   app.use("/auth", authRouter);
   app.use("/categories", categoriesRouter);
   app.use("/products", productsRouter);
+  app.use("/inventory", inventoryRouter);
   app.use("/settings", settingsRouter);
 }

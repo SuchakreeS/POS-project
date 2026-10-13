@@ -4,6 +4,7 @@ import { useState, type FormEvent } from "react";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
+import { LinkButton } from "@/components/ui/LinkButton";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { toast } from "@/components/ui/toast";
 import { useDiscardConfirm } from "@/components/ui/useDiscardConfirm";
@@ -26,10 +27,13 @@ export interface EditItemDialogProps {
   /** The item to edit; null = closed. */
   productId: string | null;
   onClose: () => void;
+  /** Show Restock · Adjust links by "Current stock"; the dialog closes (asking first if edited), then these run. */
+  onRestock?: (productId: string) => void;
+  onAdjust?: (productId: string) => void;
 }
 
 /** Edit item (plan.md → Edit item dialog). Standalone: takes an id, loads and saves its own data. */
-export function EditItemDialog({ productId, onClose }: EditItemDialogProps) {
+export function EditItemDialog({ productId, onClose, onRestock, onAdjust }: EditItemDialogProps) {
   const query = useProduct(productId);
   if (!productId) return null;
 
@@ -50,10 +54,23 @@ export function EditItemDialog({ productId, onClose }: EditItemDialogProps) {
   }
 
   // Keyed by id so switching items starts a fresh form.
-  return <EditItemForm key={productId} product={query.data} onClose={onClose} />;
+  return (
+    <EditItemForm
+      key={productId}
+      product={query.data}
+      onClose={onClose}
+      onRestock={onRestock}
+      onAdjust={onAdjust}
+    />
+  );
 }
 
-function EditItemForm({ product, onClose }: { product: Product; onClose: () => void }) {
+function EditItemForm({
+  product,
+  onClose,
+  onRestock,
+  onAdjust,
+}: { product: Product } & Omit<EditItemDialogProps, "productId">) {
   const [initial] = useState(() => productToForm(product));
   const [values, setValues] = useState(initial);
   const [errors, setErrors] = useState<ProductFormErrors>({});
@@ -134,6 +151,22 @@ function EditItemForm({ product, onClose }: { product: Product; onClose: () => v
         <ProductFormFields
           mode="edit"
           product={product}
+          stockLinks={
+            (onRestock || onAdjust) && (
+              <span className="flex gap-3 text-sm">
+                {onRestock && (
+                  <LinkButton onClick={() => discard.closeThen(() => onRestock(product.id))}>
+                    Restock
+                  </LinkButton>
+                )}
+                {onAdjust && (
+                  <LinkButton onClick={() => discard.closeThen(() => onAdjust(product.id))}>
+                    Adjust
+                  </LinkButton>
+                )}
+              </span>
+            )
+          }
           values={values}
           errors={errors}
           onChange={change}

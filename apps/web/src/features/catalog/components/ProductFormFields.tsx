@@ -14,6 +14,8 @@ interface ProductFormFieldsProps {
   onChange: (field: ProductField, value: string | null) => void;
   /** Edit mode: the saved product (current stock is shown read-only). */
   product?: Product;
+  /** Edit mode: Restock · Adjust links next to "Current stock". */
+  stockLinks?: ReactNode;
   barcodeRef?: Ref<HTMLInputElement>;
 }
 
@@ -24,6 +26,7 @@ export function ProductFormFields({
   errors,
   onChange,
   product,
+  stockLinks,
   barcodeRef,
 }: ProductFormFieldsProps) {
   const text = (field: ProductField) => ({
@@ -100,10 +103,10 @@ export function ProductFormFields({
             ) : (
               <TextField
                 label="Current stock"
+                labelAside={stockLinks}
                 value={(product?.stockQty ?? 0).toLocaleString("en-US")}
                 readOnly
                 unit="pcs"
-                hint="Changes through Restock or Adjust stock"
               />
             )}
             <TextField
