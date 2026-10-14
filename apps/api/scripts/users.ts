@@ -1,5 +1,5 @@
 /**
- * Manage users from the terminal (until the Users page exists, and as a rescue if every admin
+ * Manage users from the terminal (the Users page does the same; this is the rescue if every admin
  * forgets their password):
  *
  *   pnpm user:create            add a user (asks for username, name, role, password)
@@ -18,14 +18,15 @@ import {
   type Role,
 } from "@pos/shared";
 import type { z } from "zod";
-import type { AuditActor } from "../src/audit/audit";
+import type { AuditContext } from "../src/audit/audit";
 import { HttpError } from "../src/lib/http-error";
 import { prisma } from "../src/lib/prisma";
-import type { RequestMeta } from "../src/lib/request-meta";
-import { createUser, resetPassword } from "../src/modules/users/users.service";
+import { createUser, findByUsername, resetPassword } from "../src/modules/users/users.service";
 
-const CLI_ACTOR: AuditActor = { userId: null, userName: "Terminal (CLI)", role: "SYSTEM" };
-const CLI_META: RequestMeta = { ip: null, userAgent: "pos-cli", terminalId: null };
+const CLI: AuditContext = {
+  actor: { userId: null, userName: "Terminal (CLI)", role: "SYSTEM" },
+  meta: { ip: null, userAgent: "pos-cli", terminalId: null },
+};
 
 const ROLE_LABELS: Record<Role, string> = { ADMIN: "admin", CASHIER: "cashier" };
 
@@ -123,7 +124,7 @@ async function create(prompt: Prompter) {
   const role = await askRole(prompt);
   const password = await askPasswordTwice(prompt);
 
-  const user = await createUser({ username, displayName, role, password }, CLI_ACTOR, CLI_META);
+  const user = await createUser({ username, displayName, role, password }, CLI);
   console.log(
     `\n✅ Added ${user.displayName} (${ROLE_LABELS[user.role]}). Log in as "${user.username}".`,
   );
@@ -134,7 +135,9 @@ async function reset(prompt: Prompter) {
   const username = await askUsername(prompt, "Username: ", true);
   const password = await askPasswordTwice(prompt);
 
-  const user = await resetPassword(username, password, CLI_ACTOR, CLI_META);
+  const found = await findByUsername(username);
+  if (!found) throw HttpError.notFound(`No user named "${username}".`);
+  const user = await resetPassword(found.id, { password }, CLI);
   console.log(
     `\n✅ New password set for ${user.displayName}. They were logged out on every device.`,
   );

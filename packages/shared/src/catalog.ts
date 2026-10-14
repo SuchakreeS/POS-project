@@ -112,7 +112,7 @@ export const productNameSchema = z
 
 export const sellingPriceSchema = satangSchema.min(1, "Selling price must be more than 0");
 
-const stockCountSchema = (label: string) =>
+export const stockCountSchema = (label: string) =>
   z
     .number({ error: `Enter the ${label}` })
     .int(`${capitalize(label)} must be a whole number`)

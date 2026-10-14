@@ -2,6 +2,9 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   test: {
+    // DB integration files share one database, and some rules look at the whole table
+    // ("at least one active admin"), so test files run one at a time.
+    fileParallelism: false,
     include: ["src/**/*.test.ts", "scripts/**/*.test.mjs"],
     // env.ts validates on import; give tests safe values.
     // Unit tests never touch a database. Integration tests (*.integration.test.ts) run only when

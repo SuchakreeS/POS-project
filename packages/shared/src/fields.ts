@@ -11,3 +11,14 @@ export const optionalText = (schema: z.ZodType<string>) =>
   );
 
 export const noteSchema = optionalText(z.string().trim().max(NOTE_MAX, "Note is too long"));
+
+export const PHONE_MAX = 20;
+
+/** Optional phone number (customers, shop): digits, spaces, + - ( ). */
+export const phoneSchema = optionalText(
+  z
+    .string()
+    .trim()
+    .max(PHONE_MAX, "Phone number is too long")
+    .regex(/^[0-9+\-\s()]+$/, "Use only numbers, spaces, + or -"),
+);

@@ -1,18 +1,24 @@
-import type { TerminalList } from "@pos/shared";
+import { terminalInputSchema, type Terminal, type TerminalList } from "@pos/shared";
 import { Router } from "express";
-import { prisma } from "../../lib/prisma";
-import { requireAuth } from "../../middleware/require-auth";
+import { requestContext } from "../../lib/request-context";
+import { requireAuth, requireRole } from "../../middleware/require-auth";
+import { validateBody } from "../../middleware/validate";
+import { createTerminal, listTerminals } from "./terminals.service";
 
-/** /terminals — the checkout devices. The web app picks one per PC (Settings lets admins change it). */
+/** /terminals — checkout devices. Each PC picks its own on the Settings page (saved in the browser). */
 export const terminalsRouter = Router();
 terminalsRouter.use(requireAuth);
 
 terminalsRouter.get("/", async (_req, res) => {
-  const terminals = await prisma.terminal.findMany({
-    where: { isActive: true },
-    orderBy: { code: "asc" },
-    select: { id: true, code: true, name: true },
-  });
-  const body: TerminalList = { items: terminals };
-  res.json(body);
+  res.json({ items: await listTerminals() } satisfies TerminalList);
 });
+
+terminalsRouter.post(
+  "/",
+  requireRole("ADMIN"),
+  validateBody(terminalInputSchema),
+  async (req, res) => {
+    const terminal = await createTerminal(req.body, requestContext(req));
+    res.status(201).json(terminal satisfies Terminal);
+  },
+);

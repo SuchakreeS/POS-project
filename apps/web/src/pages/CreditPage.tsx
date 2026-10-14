@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useSearchParams } from "react-router";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Alert } from "@/components/ui/Alert";
+import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Chip } from "@/components/ui/Chip";
@@ -21,7 +22,6 @@ import {
   ageLabel,
   daysSince,
   filterCustomers,
-  initialOf,
   OLD_DEBT_DAYS,
   type CreditFilter,
   type CreditSort,
@@ -286,12 +286,7 @@ function CustomerRow({
           }}
           className="flex max-w-full items-center gap-3 rounded-lg text-left focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
         >
-          <span
-            aria-hidden
-            className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary-tint font-semibold text-primary-dark"
-          >
-            {initialOf(customer.name)}
-          </span>
+          <Avatar name={customer.name} />
           <span className="min-w-0">
             <span className="block truncate font-medium">{customer.name}</span>
             {customer.phone && (

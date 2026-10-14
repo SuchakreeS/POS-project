@@ -10,6 +10,12 @@ export interface AuditActor {
   role: string;
 }
 
+/** Who acted and from where: a signed-in user (RequestContext) or the `pnpm user:*` commands. */
+export interface AuditContext {
+  actor: AuditActor;
+  meta: RequestMeta;
+}
+
 export interface AuditEntry {
   action: AuditAction;
   entityType: string;

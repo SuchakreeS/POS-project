@@ -2,7 +2,7 @@ import cookieParser from "cookie-parser";
 import cors from "cors";
 import express from "express";
 import helmet from "helmet";
-import { IDEMPOTENCY_HEADER } from "@pos/shared";
+import { IDEMPOTENCY_HEADER, TERMINAL_HEADER } from "@pos/shared";
 import { AUTH } from "./config";
 import { env } from "./env";
 import { errorHandler, notFound } from "./middleware/error-handler";
@@ -21,7 +21,7 @@ export function createApp() {
         "Content-Type",
         "Authorization",
         AUTH.clientHeader,
-        "x-terminal-id",
+        TERMINAL_HEADER,
         IDEMPOTENCY_HEADER,
       ],
     }),

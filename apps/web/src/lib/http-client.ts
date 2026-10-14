@@ -42,7 +42,8 @@ export interface AuthHooks {
 
 export interface HttpClientOptions {
   baseUrl: string;
-  headers?: Record<string, string>;
+  /** Sent with every request; a function is called each time (for values that change). */
+  headers?: Record<string, string> | (() => Record<string, string>);
   auth?: AuthHooks;
   fetch?: typeof fetch;
 }
@@ -55,7 +56,8 @@ export function createHttpClient(options: HttpClientOptions) {
   const doFetch = options.fetch ?? ((...args: Parameters<typeof fetch>) => fetch(...args));
 
   async function send(path: string, init: RequestOptions, token: string | null): Promise<Response> {
-    const headers: Record<string, string> = { ...options.headers, ...init.headers };
+    const base = typeof options.headers === "function" ? options.headers() : options.headers;
+    const headers: Record<string, string> = { ...base, ...init.headers };
     if (init.body !== undefined) headers["Content-Type"] = "application/json";
     if (token) headers.Authorization = `Bearer ${token}`;
 

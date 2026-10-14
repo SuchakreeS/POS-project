@@ -186,6 +186,7 @@ Stored in the `AuditLog` table from day one. There is **no page in Phase 1**; th
 | `USER_CREATE` / `USER_UPDATE` / `USER_DEACTIVATE` | Users page | changed fields (never the password) |
 | `ROLE_CHANGE` | Role changed | role before → after |
 | `SETTINGS_UPDATE` | Settings saved | changed settings before → after |
+| `TERMINAL_CREATE` | "+ Add terminal" on Settings | code, name |
 | `REPORT_GENERATED` | Nightly report saved | report date, totals |
 | `REPORT_SENT_LINE` | Sent to LINE (auto, manual "Send to LINE", or Resend) | report date, trigger (auto/manual/resend), success or error |
 
@@ -333,10 +334,13 @@ Auth
   POST   /auth/logout
   GET    /auth/me
 
-Users (Admin only)
+Users (Admin only; the role is re-checked in the database, so a demoted admin loses access at once)
   GET    /users
-  POST   /users
-  PATCH  /users/:id
+  POST   /users                   (display name, username, role, password)
+  PATCH  /users/:id               (display name, username, role)
+  POST   /users/:id/deactivate    (not yourself; never the last active admin; ends their sessions)
+  POST   /users/:id/reactivate
+  POST   /users/:id/reset-password (ends their sessions)
 
 Categories
   GET    /categories
@@ -353,7 +357,8 @@ Products
   POST   /products/:id/reactivate
 
 Settings
-  GET    /settings                (everyone; PATCH admin-only comes in step 10)
+  GET    /settings                (everyone: forms need the defaults)
+  PATCH  /settings                (admin; whole form; SETTINGS_UPDATE lists only what changed)
 
 Inventory
   POST   /inventory/restock       (body: items[{productId, qty}], note?; one transaction)
@@ -363,7 +368,8 @@ Inventory
   (Low stock: the Stock page's Low chip uses the product list; reports get their own query in step 11)
 
 Terminals
-  GET    /terminals               (active checkout devices; the PC remembers its own)
+  GET    /terminals               (active checkout devices with the next bill number; the PC remembers its own)
+  POST   /terminals               (admin; code = bill prefix, unique)
 
 Orders
   POST   /orders                  (checkout, requires Idempotency-Key header; same key = same bill)
@@ -911,7 +917,12 @@ Use the same token names for Figma color variables so design and code match.
   - [x] API: `GET /orders` (Bangkok date range up to 366 days, search bill no. or credit customer, All / Cash / PromptPay / Credit / Voided, newest first with cursor paging, per-method stats where voided bills never count as sales), `GET /orders/:id` (with who voided, when, reason, note), `POST /orders/:id/void` (order row locked so it voids once; VOID_RETURN movements, CHARGE_VOID + CREDIT_CHARGE_VOID with balance before → after, ORDER_VOID with reason; a pending PromptPay bill leaves the check page and can't be marked received). New column `Order.voidNote` (migration `order_void_note`). DB integration tests incl. two voids at once.
   - [x] Web: Orders page (search, date chip with Today / Yesterday / Last 7 days / This month / pick dates, payment chips with counts + separate Voided chip, summary strip, grouped by day, voided rows gray + struck through, Load older bills). Bill detail dialog (items, totals, payment box with Mark received for pending PromptPay and a link to the credit customer, voided info) and Void step (banner says exactly what happens to stock and money, reason chips, note required for Other). One bill viewer for the whole app: bill numbers in Orders, PromptPay page, movement history, credit history and "View bill" on the sale success screen open the bill on top of the current screen.
   - [x] Refactors: shared `noteSchema` / `optionalText` (fields.ts), `PAYMENT_METHOD_LABELS`, API cursor helper (lib/cursor.ts), test cleanup helpers (`deleteTerminalOrders`, `deleteTestCustomers`).
-- [ ] **10. Users + Settings (Admin)**: users list, add / edit / reset password / turn off, shop settings (report time is read by step 11)
+- [x] **10. Users + Settings (Admin)**: users list, add / edit / reset password / turn off, shop settings (report time is read by step 11)
+  - [x] API: `/users` (list, add, edit, turn off / on, reset password), `PATCH /settings`, `POST /terminals`, all admin only. Admin routes re-check the role and "active" in the database, so a demoted or turned-off admin loses them at once (not after 15 minutes). Rules: you can't remove your own Admin role or turn yourself off; there is always one active admin (the active admins are row-locked, so two admins removing each other at once leave one). Turning off and resetting a password end every session. Audit: USER_CREATE, USER_UPDATE (changed fields; "passwordReset" without the password), ROLE_CHANGE, USER_DEACTIVATE, SETTINGS_UPDATE (only changed fields), TERMINAL_CREATE. `pnpm user:*` uses the same service. DB test files now run one at a time (they share one database). DB integration tests incl. both races.
+  - [x] Web: Users page (avatar, "(you)", dark Admin / gray Cashier badge, Active / Turned off, last login, "…" menu: Edit, Reset password, Turn off / Turn on; your own Turn off is disabled and your own role is locked). Add / Edit user and Reset password dialogs (resetting your own password logs you out to log in again). Settings page (Shop, Daily report with 24-hour report time + Send to LINE switch, Terminals, Stock; unsaved-changes bar; asks before leaving with unsaved changes). Terminals: next bill number, "This PC" badge, "Use on this PC" (saved in the browser), "+ Add terminal". With one terminal every PC uses it; with several, checkout asks for this PC to be picked first.
+  - [x] Every request now sends this PC's terminal (`x-terminal-id`), so all audit entries record the device, not only sales.
+  - [ ] LINE status box ("Connected · group name" / "Not connected") and "Send test" come with step 11 (they need the LINE integration).
+  - [x] Refactors: `Avatar` (Credit, Users, sidebar; Thai leading vowels handled), form error helpers `fieldErrorsFrom` / `apiFieldErrors` (all forms), shared `phoneSchema` and `ROLE_LABELS`, `HttpError.sessionEnded()`, terminals moved to their own feature (`features/terminals`).
 - [ ] **11. Reports**: manual summary, saved daily snapshot, LINE push, scheduled trigger (decide Render sleep option)
 - [ ] **12. Testing pass**: checkout, void, discount clamp, credit balance, report totals
 - [ ] **13. Deploy**: Vercel (web), Render (API), Supabase (prod DB), env vars, CORS, smoke test
@@ -961,7 +972,7 @@ Use the same token names for Figma color variables so design and code match.
 
 ### Needed later (by build step 11)
 - [ ] Choose how the auto report is triggered (paid Render / Render Cron Job / Supabase pg_cron)
-- [ ] Report time (closing time) for the auto report (set on the Settings page, stored in `ShopSetting.reportTime`; the scheduler must read it)
+- [ ] Report time (closing time) for the auto report: editable on the Settings page since step 10 (`ShopSetting.reportTime`); the scheduler must read it
 - [ ] Print the shop PromptPay QR for the counter
 - [ ] Create LINE Official Account + Messaging API channel, add bot to shop group
 

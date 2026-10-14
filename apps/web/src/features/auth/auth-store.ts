@@ -17,6 +17,8 @@ interface AuthState {
 
   signIn(session: AuthResponse): void;
   signOut(): void;
+  /** The signed-in user's own name or username was edited (Users page). */
+  updateUser(user: AuthUser): void;
   /** The session ended (refresh failed). Only meaningful while signed in. */
   expire(): void;
 }
@@ -29,6 +31,10 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
   signIn: ({ accessToken, user }) => set({ status: "signedIn", user, accessToken }),
 
   signOut: () => set({ status: "signedOut", user: null, accessToken: null }),
+
+  updateUser: (user) => {
+    if (get().user?.id === user.id) set({ user });
+  },
 
   expire: () => {
     const { status } = get();

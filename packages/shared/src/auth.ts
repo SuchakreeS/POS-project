@@ -10,7 +10,7 @@ export const PASSWORD_MAX = 200;
 
 /** New usernames: 3–50 characters, lowercase letters, numbers, dot, dash, underscore. Stored lowercase. */
 export const usernameSchema = z
-  .string()
+  .string({ error: "Enter a username" })
   .trim()
   .toLowerCase()
   .min(3, "Username needs at least 3 characters")
@@ -18,12 +18,12 @@ export const usernameSchema = z
   .regex(/^[a-z0-9._-]+$/, "Use only letters, numbers, dot, dash or underscore");
 
 export const newPasswordSchema = z
-  .string()
+  .string({ error: "Enter a password" })
   .min(PASSWORD_MIN, `Password needs at least ${PASSWORD_MIN} characters`)
   .max(PASSWORD_MAX, "Password is too long");
 
 export const displayNameSchema = z
-  .string()
+  .string({ error: "Enter a name" })
   .trim()
   .min(1, "Enter a name")
   .max(60, "Name is too long");

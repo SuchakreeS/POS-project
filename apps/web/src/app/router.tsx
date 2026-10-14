@@ -1,4 +1,4 @@
-import { createBrowserRouter, Navigate } from "react-router";
+import { createBrowserRouter, Navigate, Outlet, type RouteObject } from "react-router";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { AuthGate, RequireAuth, RequireRole } from "@/features/auth/guards";
 import { ComingSoonPage } from "@/pages/ComingSoonPage";
@@ -9,6 +9,19 @@ import { SetupCheckPage } from "@/pages/SetupCheckPage";
 import { HOME_PATH } from "./navigation";
 
 const ADMIN_ONLY = ["ADMIN"] as const;
+
+/** An admin-only page: cashiers see "Only admins can open …" (the API returns 403 as well). */
+function adminPage(path: string, page: string, load: RouteObject["lazy"]): RouteObject {
+  return {
+    path,
+    element: (
+      <RequireRole roles={ADMIN_ONLY} page={page}>
+        <Outlet />
+      </RequireRole>
+    ),
+    children: [{ index: true, lazy: load }],
+  };
+}
 
 // Feature pages load on first visit (`lazy`), so the login screen stays small and fast.
 
@@ -56,22 +69,12 @@ export const router = createBrowserRouter([
                       import("@/pages/OrdersPage").then((m) => ({ Component: m.OrdersPage })),
                   },
                   { path: "reports", element: <ComingSoonPage title="Reports" step={11} /> },
-                  {
-                    path: "users",
-                    element: (
-                      <RequireRole roles={ADMIN_ONLY} page="Users">
-                        <ComingSoonPage title="Users" step={10} />
-                      </RequireRole>
-                    ),
-                  },
-                  {
-                    path: "settings",
-                    element: (
-                      <RequireRole roles={ADMIN_ONLY} page="Settings">
-                        <ComingSoonPage title="Settings" step={10} />
-                      </RequireRole>
-                    ),
-                  },
+                  adminPage("users", "Users", () =>
+                    import("@/pages/UsersPage").then((m) => ({ Component: m.UsersPage })),
+                  ),
+                  adminPage("settings", "Settings", () =>
+                    import("@/pages/SettingsPage").then((m) => ({ Component: m.SettingsPage })),
+                  ),
                   { path: "*", element: <NotFoundPage /> },
                 ],
               },

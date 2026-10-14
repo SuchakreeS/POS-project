@@ -23,7 +23,7 @@ import { toast } from "@/components/ui/toast";
 import { useMarkReceived } from "@/features/promptpay/queries";
 import { formatDayTime, formatTime } from "@/lib/datetime";
 import { errorMessage } from "@/lib/errors";
-import { focusFirstInvalid } from "@/lib/forms";
+import { apiFieldErrors, focusFirstInvalid } from "@/lib/forms";
 import { isApiError } from "@/lib/http-client";
 import { voidEffect } from "../orders-view";
 import { useOrder, useVoidOrder } from "../queries";
@@ -229,7 +229,8 @@ function Payment({ order, onLeave }: { order: Order; onLeave: () => void }) {
 
 // ---------- Void step ----------
 
-type VoidField = "reason" | "note";
+const VOID_FIELDS = ["reason", "note"] as const;
+type VoidField = (typeof VOID_FIELDS)[number];
 
 function VoidStep({
   order,
@@ -260,10 +261,9 @@ function VoidStep({
         // The bill dialog shows the voided bill afterwards, as confirmation.
         onSuccess: (voided) => toast.success(`Bill ${voided.billNo} voided`),
         onError: (failure) => {
-          const issue = isApiError(failure) ? failure.issues?.[0] : undefined;
-          const field = issue?.path[0];
-          if (issue && (field === "reason" || field === "note")) {
-            setErrors({ [field]: issue.message });
+          const fieldErrors = apiFieldErrors(failure, VOID_FIELDS);
+          if (fieldErrors) {
+            setErrors(fieldErrors);
             return focusFirstInvalid(form);
           }
           toast.error(errorMessage(failure)); // e.g. someone else voided it a moment ago

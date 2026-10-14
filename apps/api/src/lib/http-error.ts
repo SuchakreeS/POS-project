@@ -30,6 +30,11 @@ export class HttpError extends Error {
     return new HttpError(401, code, message);
   }
 
+  /** The login is over (bad or old token, revoked session, user turned off): the web app asks to log in again. */
+  static sessionEnded() {
+    return new HttpError(401, "SESSION_EXPIRED", "Your session has ended. Please log in again.");
+  }
+
   static forbidden(
     message = "You don't have permission to do this.",
     code: ApiErrorCode = "FORBIDDEN",

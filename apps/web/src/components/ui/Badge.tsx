@@ -1,13 +1,15 @@
 import { clsx } from "clsx";
 import type { ReactNode } from "react";
 
-export type BadgeTone = "success" | "warning" | "danger" | "neutral";
+export type BadgeTone = "success" | "warning" | "danger" | "neutral" | "dark";
 
 const TONES: Record<BadgeTone, { box: string; dot: string }> = {
   success: { box: "bg-success-tint text-success-text", dot: "bg-success" },
   warning: { box: "bg-warning-tint text-warning-text", dot: "bg-warning" },
   danger: { box: "bg-danger-tint text-danger-text", dot: "bg-danger" },
   neutral: { box: "bg-hover text-text-soft", dot: "bg-text-muted" },
+  /** Admin role (plan.md → Users page). */
+  dark: { box: "bg-text text-page", dot: "bg-page" },
 };
 
 /** Status pill: colored dot + label, never color alone (plan.md → Badges). Hugs its content. */

@@ -1,6 +1,7 @@
 import type { Role } from "@pos/shared";
 import type { Request, RequestHandler } from "express";
 import { HttpError } from "../lib/http-error";
+import { prisma } from "../lib/prisma";
 import { verifyAccessToken } from "../modules/auth/tokens";
 
 /** Requires a valid `Authorization: Bearer <access token>` and sets `req.auth`. */
@@ -12,16 +13,27 @@ export const requireAuth: RequestHandler = async (req, _res, next) => {
   try {
     req.auth = await verifyAccessToken(token);
   } catch {
-    throw HttpError.unauthorized("Your session has ended. Please log in again.", "SESSION_EXPIRED");
+    throw HttpError.sessionEnded();
   }
   next();
 };
 
-/** Use after requireAuth: allows only the given roles (403 otherwise). */
+/**
+ * Use after requireAuth: allows only the given roles (403 otherwise).
+ * The role inside the token can be up to 15 minutes old, so it is checked again in the database:
+ * an admin who was demoted or turned off loses admin pages at once, not at their next refresh.
+ */
 export function requireRole(...roles: Role[]): RequestHandler {
-  return (req, _res, next) => {
-    if (!req.auth) throw HttpError.unauthorized();
-    if (!roles.includes(req.auth.role)) throw HttpError.forbidden();
+  return async (req, _res, next) => {
+    const auth = getAuth(req);
+    if (!roles.includes(auth.role)) throw HttpError.forbidden();
+
+    const user = await prisma.user.findUnique({
+      where: { id: auth.userId },
+      select: { role: true, isActive: true },
+    });
+    if (!user?.isActive) throw HttpError.sessionEnded();
+    if (!roles.includes(user.role)) throw HttpError.forbidden();
     next();
   };
 }

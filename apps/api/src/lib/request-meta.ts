@@ -1,3 +1,4 @@
+import { TERMINAL_HEADER } from "@pos/shared";
 import type { Request } from "express";
 
 /** Request details stored with audit entries and sessions. */
@@ -6,8 +7,6 @@ export interface RequestMeta {
   userAgent: string | null;
   terminalId: string | null;
 }
-
-const TERMINAL_HEADER = "x-terminal-id";
 
 export function requestMeta(req: Request): RequestMeta {
   const terminal = req.get(TERMINAL_HEADER);

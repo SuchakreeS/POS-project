@@ -3,6 +3,7 @@
  * Every test file uses its own prefix and removes only rows it created.
  */
 import type { Role } from "@pos/shared";
+import type { Response } from "supertest";
 import { prisma } from "../lib/prisma";
 import { hashPassword } from "../modules/auth/password";
 import { signAccessToken } from "../modules/auth/tokens";
@@ -65,3 +66,10 @@ export async function deleteTestCustomers(prefix: string) {
   await prisma.creditEntry.deleteMany({ where: { id: { in: entryIds } } });
   await prisma.customer.deleteMany({ where: { id: { in: customerIds } } });
 }
+
+/** The `pos_refresh=…` cookie a login or refresh response set, ready for `.set("Cookie", …)`. */
+export const refreshCookieOf = (res: Response) =>
+  ([] as string[])
+    .concat(res.headers["set-cookie"] ?? [])
+    .find((cookie) => cookie.startsWith("pos_refresh="))
+    ?.split(";")[0] ?? "";

@@ -53,6 +53,24 @@ describe("createHttpClient", () => {
     });
   });
 
+  it("reads header functions on every request (e.g. this PC's terminal)", async () => {
+    let terminal: string | null = null;
+    const fetchMock = vi.fn<typeof fetch>(async () => json(200, {}));
+    const client = createHttpClient({
+      baseUrl: "http://api.test",
+      headers: (): Record<string, string> => (terminal ? { "x-terminal-id": terminal } : {}),
+      fetch: fetchMock,
+    });
+    const headersOf = (call: number) =>
+      fetchMock.mock.calls[call]?.[1]?.headers as Record<string, string>;
+
+    await client.get("/a");
+    terminal = "t2";
+    await client.get("/b");
+    expect(headersOf(0)["x-terminal-id"]).toBeUndefined();
+    expect(headersOf(1)["x-terminal-id"]).toBe("t2");
+  });
+
   it("does not send the token or refresh when auth is false", async () => {
     const { client, hooks, headersOf } = setup([unauthorized()]);
 

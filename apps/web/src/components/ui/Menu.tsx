@@ -25,16 +25,20 @@ export function Menu({ trigger, children }: { trigger: ReactNode; children: Reac
 export function MenuItem({
   icon: Icon,
   danger,
+  disabled,
   onSelect,
   children,
 }: {
   icon: TablerIcon;
   danger?: boolean;
+  /** Shown but can't be picked (say why in the label or a hint nearby). */
+  disabled?: boolean;
   onSelect: () => void;
   children: ReactNode;
 }) {
   return (
     <DropdownMenu.Item
+      disabled={disabled}
       onSelect={onSelect}
       className={clsx(
         "flex h-10 cursor-pointer items-center gap-3 rounded-xl px-3 font-medium outline-none select-none",

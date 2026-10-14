@@ -1,11 +1,12 @@
+import { ROLE_LABELS } from "@pos/shared";
 import { IconLogout } from "@tabler/icons-react";
 import { clsx } from "clsx";
 import { useState } from "react";
 import { NavLink } from "react-router";
 import { navSectionsFor, type NavItem } from "@/app/navigation";
+import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { useCurrentUser } from "@/features/auth/auth-store";
-import { ROLE_LABELS } from "@/features/auth/roles";
 import { useLogout } from "@/features/auth/use-logout";
 import { usePromptPayPendingCount } from "@/features/promptpay/queries";
 
@@ -49,12 +50,7 @@ export function NavContent({ onNavigate }: { onNavigate?: () => void }) {
 
       <div className="border-t-2 border-border p-4">
         <div className="flex items-center gap-3">
-          <span
-            aria-hidden
-            className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary-tint font-semibold text-primary-dark"
-          >
-            {user.displayName.charAt(0).toUpperCase()}
-          </span>
+          <Avatar name={user.displayName} />
           <div className="min-w-0">
             <p className="truncate font-medium">{user.displayName}</p>
             <p className="text-sm text-text-muted">{ROLE_LABELS[user.role]}</p>

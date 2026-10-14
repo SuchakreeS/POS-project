@@ -2,12 +2,11 @@ import {
   parseThb,
   productCreateSchema,
   satangToInput,
-  type ApiErrorIssue,
   type Product,
   type ProductCreateInput,
   type ProductUpdateInput,
 } from "@pos/shared";
-import { isApiError } from "@/lib/http-client";
+import { apiFieldErrors } from "@/lib/forms";
 
 /*
  * Add / Edit item form logic, kept out of the components so it can be tested on its own.
@@ -134,13 +133,7 @@ export function changedFields(product: Product, data: ProductCreateInput): Produ
 
 /** Field errors sent by the API (400 validation or 409 duplicate) → form errors. */
 export function serverFieldErrors(error: unknown): ProductFormErrors | null {
-  if (!isApiError(error) || !error.issues?.length) return null;
-  const errors: ProductFormErrors = {};
-  for (const issue of error.issues as ApiErrorIssue[]) {
-    const field = issue.path[0];
-    if (typeof field === "string" && isProductField(field)) errors[field] ??= issue.message;
-  }
-  return Object.keys(errors).length > 0 ? errors : null;
+  return apiFieldErrors(error, FIELDS);
 }
 
 const FIELDS: readonly ProductField[] = [
@@ -153,10 +146,6 @@ const FIELDS: readonly ProductField[] = [
   "startingStock",
   "lowStockAt",
 ];
-
-function isProductField(value: string): value is ProductField {
-  return (FIELDS as readonly string[]).includes(value);
-}
 
 /** True when the form differs from where it started (asks before throwing work away). */
 export function isDirty(values: ProductFormValues, initial: ProductFormValues): boolean {

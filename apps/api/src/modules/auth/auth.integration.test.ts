@@ -8,6 +8,7 @@ import request from "supertest";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../../app";
 import { prisma } from "../../lib/prisma";
+import { refreshCookieOf } from "../../test/db-helpers";
 import { hashPassword } from "./password";
 
 const enabled = Boolean(process.env.TEST_DATABASE_URL);
@@ -41,12 +42,6 @@ async function createUser(
 
 const login = (username: string, password = PASSWORD) =>
   request(app).post("/auth/login").set("x-pos-client", "web").send({ username, password });
-
-const refreshCookieOf = (res: request.Response) =>
-  ([] as string[])
-    .concat(res.headers["set-cookie"] ?? [])
-    .find((c) => c.startsWith("pos_refresh="))
-    ?.split(";")[0];
 
 describe.skipIf(!enabled)("auth flow (database)", () => {
   beforeEach(cleanup);
@@ -118,7 +113,7 @@ describe.skipIf(!enabled)("auth flow (database)", () => {
 
   it("refresh rotates the token: new one works, old one is dead", async () => {
     const user = await createUser("lek");
-    const first = refreshCookieOf(await login(user.username))!;
+    const first = refreshCookieOf(await login(user.username));
 
     const refreshed = await request(app)
       .post("/auth/refresh")
@@ -126,7 +121,7 @@ describe.skipIf(!enabled)("auth flow (database)", () => {
       .set("Cookie", first);
     expect(refreshed.status).toBe(200);
     expect(refreshed.body.user.id).toBe(user.id);
-    const second = refreshCookieOf(refreshed)!;
+    const second = refreshCookieOf(refreshed);
     expect(second).not.toBe(first);
 
     const reuse = await request(app)
@@ -145,7 +140,7 @@ describe.skipIf(!enabled)("auth flow (database)", () => {
 
   it("logout revokes the session and records LOGOUT", async () => {
     const user = await createUser("arm");
-    const cookie = refreshCookieOf(await login(user.username))!;
+    const cookie = refreshCookieOf(await login(user.username));
 
     const out = await request(app)
       .post("/auth/logout")
@@ -163,7 +158,7 @@ describe.skipIf(!enabled)("auth flow (database)", () => {
 
   it("a turned-off user can't refresh an existing session", async () => {
     const user = await createUser("dang");
-    const cookie = refreshCookieOf(await login(user.username))!;
+    const cookie = refreshCookieOf(await login(user.username));
     await prisma.user.update({ where: { id: user.id }, data: { isActive: false } });
 
     const res = await request(app)

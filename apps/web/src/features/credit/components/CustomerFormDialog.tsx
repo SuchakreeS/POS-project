@@ -12,11 +12,11 @@ import { Dialog } from "@/components/ui/Dialog";
 import { TextField } from "@/components/ui/TextField";
 import { toast } from "@/components/ui/toast";
 import { errorMessage } from "@/lib/errors";
-import { focusFirstInvalid } from "@/lib/forms";
-import { isApiError } from "@/lib/http-client";
+import { apiFieldErrors, fieldErrorsFrom, focusFirstInvalid } from "@/lib/forms";
 import { useSaveCustomer } from "../queries";
 
-type Field = "name" | "phone" | "note";
+const FIELDS = ["name", "phone", "note"] as const;
+type Field = (typeof FIELDS)[number];
 
 export interface CustomerFormValues {
   name: string;
@@ -77,9 +77,7 @@ function CustomerForm({
     const form = event.currentTarget;
     const parsed = customerInputSchema.safeParse(values);
     if (!parsed.success) {
-      const found: Partial<Record<Field, string>> = {};
-      for (const issue of parsed.error.issues) found[issue.path[0] as Field] ??= issue.message;
-      setErrors(found);
+      setErrors(fieldErrorsFrom(parsed.error.issues, FIELDS));
       return focusFirstInvalid(form);
     }
     save.mutate(parsed.data, {
@@ -89,9 +87,9 @@ function CustomerForm({
         onClose();
       },
       onError: (error) => {
-        const issue = isApiError(error) ? error.issues?.[0] : undefined;
-        if (issue?.path[0] === "name") {
-          setErrors({ name: issue.message });
+        const fieldErrors = apiFieldErrors(error, FIELDS);
+        if (fieldErrors) {
+          setErrors(fieldErrors);
           focusFirstInvalid(form);
         }
       },
@@ -99,9 +97,7 @@ function CustomerForm({
   };
 
   const generalError =
-    save.isError && !(isApiError(save.error) && save.error.issues?.length)
-      ? errorMessage(save.error)
-      : null;
+    save.isError && !apiFieldErrors(save.error, FIELDS) ? errorMessage(save.error) : null;
 
   return (
     <Dialog

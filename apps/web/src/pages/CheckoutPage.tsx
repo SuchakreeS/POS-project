@@ -21,10 +21,10 @@ import { buildCart, needsStockConfirm } from "@/features/checkout/cart";
 import { useCartStore } from "@/features/checkout/cart-store";
 import { CartPanel } from "@/features/checkout/components/CartPanel";
 import { PaymentDialog } from "@/features/checkout/components/PaymentDialog";
-import { useTerminal } from "@/features/checkout/terminal";
 import { useBillViewer } from "@/features/orders/bill-viewer";
 import { BillViewer } from "@/features/orders/components/BillViewer";
 import { useShopSettings } from "@/features/settings/queries";
+import { useThisTerminal } from "@/features/terminals/queries";
 
 type Overlay =
   | "payment"
@@ -41,7 +41,8 @@ type Overlay =
  */
 export function CheckoutPage() {
   const products = useProducts();
-  const { terminal, isError: terminalError, isPending: terminalPending } = useTerminal();
+  const { current: thisTerminal, isError: terminalError } = useThisTerminal();
+  const terminal = thisTerminal?.status === "ready" ? thisTerminal.terminal : null;
   useShopSettings(); // Add new item (unknown barcode) pre-fills the low-stock alert from it
 
   const { lines, discount, selectedId, overStockOk, add, setQty, remove, clear, allowOverStock } =
@@ -130,8 +131,14 @@ export function CheckoutPage() {
 
   const blocker = terminalError ? (
     <Alert tone="danger">Couldn't load the checkout devices. Check the connection.</Alert>
-  ) : !terminalPending && !terminal ? (
-    <Alert tone="danger">This shop has no checkout device set up. Ask the admin.</Alert>
+  ) : thisTerminal?.status === "none" ? (
+    <Alert tone="danger">
+      This shop has no checkout device yet. An admin can add one in <SettingsLink />.
+    </Alert>
+  ) : thisTerminal?.status === "unpicked" ? (
+    <Alert tone="warning">
+      This PC isn't set as a checkout device yet. An admin can pick one for it in <SettingsLink />.
+    </Alert>
   ) : undefined;
 
   return (
@@ -318,4 +325,12 @@ function uniqueCategories(products: readonly Product[]) {
   for (const product of products)
     if (product.category) byId.set(product.category.id, product.category);
   return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name, "th"));
+}
+
+function SettingsLink() {
+  return (
+    <Link to="/settings" className="font-medium underline">
+      Settings → Terminals
+    </Link>
+  );
 }

@@ -14,9 +14,6 @@ export interface SessionTokens {
   user: AuthUser;
 }
 
-const sessionEnded = () =>
-  HttpError.unauthorized("Your session has ended. Please log in again.", "SESSION_EXPIRED");
-
 export function toAuthUser(user: Pick<User, "id" | "username" | "displayName" | "role">): AuthUser {
   return { id: user.id, username: user.username, displayName: user.displayName, role: user.role };
 }
@@ -106,7 +103,7 @@ export async function refresh(
   refreshToken: string | undefined,
   meta: RequestMeta,
 ): Promise<SessionTokens> {
-  if (!refreshToken) throw sessionEnded();
+  if (!refreshToken) throw HttpError.sessionEnded();
 
   const oldHash = hashRefreshToken(refreshToken);
   const now = new Date();
@@ -116,7 +113,7 @@ export async function refresh(
   });
 
   if (!session || session.revokedAt || session.expiresAt <= now || !session.user.isActive) {
-    throw sessionEnded();
+    throw HttpError.sessionEnded();
   }
 
   const nextToken = newRefreshToken();
@@ -131,7 +128,7 @@ export async function refresh(
       userAgent: meta.userAgent,
     },
   });
-  if (count !== 1) throw sessionEnded();
+  if (count !== 1) throw HttpError.sessionEnded();
 
   return {
     accessToken: await issueAccessToken(session.user),
@@ -164,6 +161,6 @@ export async function logout(refreshToken: string | undefined, meta: RequestMeta
 /** The current user, fresh from the database (role or active status may have changed). */
 export async function currentUser(userId: string): Promise<AuthUser> {
   const user = await prisma.user.findUnique({ where: { id: userId } });
-  if (!user || !user.isActive) throw sessionEnded();
+  if (!user || !user.isActive) throw HttpError.sessionEnded();
   return toAuthUser(user);
 }

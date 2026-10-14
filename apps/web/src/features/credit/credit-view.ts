@@ -59,14 +59,3 @@ export function ageLabel(days: number): string {
 
 /** Debts this old get an amber badge (plan.md → Credit page). */
 export const OLD_DEBT_DAYS = 30;
-
-// Thai vowels written before their consonant (เ แ โ ใ ไ) — skip them so "เอก" shows "อ", not "เ".
-const LEADING_VOWELS = /^[เ-ไ]+/u;
-const graphemes = new Intl.Segmenter("th", { granularity: "grapheme" });
-
-/** One letter for the avatar circle: first grapheme, uppercased ("somchai" → "S", "เอก" → "อ"). */
-export function initialOf(name: string): string {
-  const trimmed = name.trim().replace(LEADING_VOWELS, "");
-  const first = graphemes.segment(trimmed)[Symbol.iterator]().next().value?.segment ?? "?";
-  return first.toLocaleUpperCase("en");
-}

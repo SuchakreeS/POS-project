@@ -12,7 +12,7 @@ import { TextField } from "@/components/ui/TextField";
 import { toast } from "@/components/ui/toast";
 import { useProduct } from "@/features/catalog/queries";
 import { errorMessage } from "@/lib/errors";
-import { focusFirstInvalid } from "@/lib/forms";
+import { apiFieldErrors, focusFirstInvalid } from "@/lib/forms";
 import { isApiError } from "@/lib/http-client";
 import { useAdjustStock } from "../queries";
 
@@ -34,7 +34,8 @@ const QTY_LABELS: Record<AdjustMode, string> = {
   SET: "Counted on the shelf",
 };
 
-type Field = "qty" | "reason" | "note";
+const FIELDS = ["qty", "reason", "note"] as const;
+type Field = (typeof FIELDS)[number];
 type Errors = Partial<Record<Field, string>>;
 
 /** Adjust stock (plan.md → Adjust stock dialog). Standalone: takes an id, loads and saves its own data. */
@@ -100,10 +101,9 @@ function AdjustForm({ product, onClose }: { product: Product; onClose: () => voi
           onClose();
         },
         onError: (failure) => {
-          const issue = isApiError(failure) ? failure.issues?.[0] : undefined;
-          const field = issue?.path[0];
-          if (issue && (field === "qty" || field === "reason" || field === "note")) {
-            setErrors({ [field]: issue.message });
+          const fieldErrors = apiFieldErrors(failure, FIELDS);
+          if (fieldErrors) {
+            setErrors(fieldErrors);
             focusFirstInvalid(form);
           }
         },

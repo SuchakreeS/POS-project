@@ -107,6 +107,8 @@ export interface Terminal {
   id: string;
   code: string;
   name: string;
+  /** The bill number its next sale gets, e.g. "T1-000126". */
+  nextBillNo: string;
 }
 
 export interface TerminalList {

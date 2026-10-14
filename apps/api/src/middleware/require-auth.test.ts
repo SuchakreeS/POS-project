@@ -1,9 +1,16 @@
 import express from "express";
 import request from "supertest";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { prisma } from "../lib/prisma";
 import { signAccessToken } from "../modules/auth/tokens";
 import { errorHandler } from "./error-handler";
 import { getAuth, requireAuth, requireRole } from "./require-auth";
+
+// requireRole re-reads the user's role; stand in for the database.
+vi.mock("../lib/prisma", () => ({ prisma: { user: { findUnique: vi.fn() } } }));
+const findUser = vi.mocked(prisma.user.findUnique);
+const inDatabase = (row: { role: "ADMIN" | "CASHIER"; isActive: boolean } | null) =>
+  findUser.mockResolvedValue(row as Awaited<ReturnType<typeof prisma.user.findUnique>>);
 
 function testApp() {
   const app = express();
@@ -43,6 +50,8 @@ describe("requireAuth", () => {
 });
 
 describe("requireRole", () => {
+  beforeEach(() => inDatabase({ role: "ADMIN", isActive: true }));
+
   it("403 for a cashier on an admin route", async () => {
     const res = await request(testApp())
       .get("/admin")
@@ -56,5 +65,22 @@ describe("requireRole", () => {
       .get("/admin")
       .set("Authorization", `Bearer ${await tokenFor("ADMIN")}`);
     expect(res.status).toBe(200);
+  });
+
+  it("403 when the admin was demoted after the token was issued", async () => {
+    inDatabase({ role: "CASHIER", isActive: true });
+    const res = await request(testApp())
+      .get("/admin")
+      .set("Authorization", `Bearer ${await tokenFor("ADMIN")}`);
+    expect(res.status).toBe(403);
+  });
+
+  it("401 SESSION_EXPIRED when the admin was turned off", async () => {
+    inDatabase({ role: "ADMIN", isActive: false });
+    const res = await request(testApp())
+      .get("/admin")
+      .set("Authorization", `Bearer ${await tokenFor("ADMIN")}`);
+    expect(res.status).toBe(401);
+    expect(res.body.error.code).toBe("SESSION_EXPIRED");
   });
 });
