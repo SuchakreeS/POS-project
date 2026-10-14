@@ -3,6 +3,7 @@ import {
   formatSatang,
   formatTHB,
   parseThb,
+  PAYMENT_METHOD_LABELS,
   type CreditHistoryEntry,
   type CustomerDetail,
   type RepaymentMethod,
@@ -20,6 +21,7 @@ import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { TextField } from "@/components/ui/TextField";
 import { toast } from "@/components/ui/toast";
+import { BillLink } from "@/features/orders/components/BillLink";
 import { formatDayLabel, formatTime } from "@/lib/datetime";
 import { errorMessage } from "@/lib/errors";
 import { isApiError } from "@/lib/http-client";
@@ -230,14 +232,17 @@ function HistoryTable({ history }: { history: CreditHistoryEntry[] }) {
 
 /** What happened (first line) and which bill or note (second line, muted). */
 function What({ entry }: { entry: CreditHistoryEntry }) {
-  const detail = entry.order ? `Bill ${entry.order.billNo}` : entry.note;
-  const method = entry.method === "PROMPTPAY" ? "PromptPay" : "Cash";
+  const method = PAYMENT_METHOD_LABELS[entry.method ?? "CASH"];
   return (
     <>
       {entry.type === "CHARGE" && <span className="block">Credit sale</span>}
       {entry.type === "CHARGE_VOID" && <Badge tone="neutral">Voided sale</Badge>}
       {entry.type === "REPAYMENT" && <Badge tone="success">Payment · {method}</Badge>}
-      {detail && <span className="block truncate text-sm text-text-muted">{detail}</span>}
+      {entry.order ? (
+        <BillLink order={entry.order} className="block text-sm" />
+      ) : (
+        entry.note && <span className="block truncate text-sm text-text-muted">{entry.note}</span>
+      )}
     </>
   );
 }

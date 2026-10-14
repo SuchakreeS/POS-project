@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addDays, bangkokDateKey, bangkokDayRange } from "./time";
+import { addDays, bangkokDateKey, bangkokDayRange, bangkokPeriod, isDateKey } from "./time";
 
 describe("bangkokDateKey", () => {
   it("uses the Bangkok calendar day, not UTC", () => {
@@ -32,5 +32,20 @@ describe("addDays", () => {
     expect(addDays("2026-10-01", -1)).toBe("2026-09-30");
     expect(addDays("2026-12-31", 1)).toBe("2027-01-01");
     expect(addDays("2028-02-28", 1)).toBe("2028-02-29");
+  });
+});
+
+describe("isDateKey / bangkokPeriod", () => {
+  it("accepts only real days", () => {
+    expect(isDateKey("2026-10-14")).toBe(true);
+    expect(isDateKey("2026-02-30")).toBe(false);
+    expect(isDateKey("14/10/2026")).toBe(false);
+  });
+
+  it("covers both days in full, Bangkok time", () => {
+    expect(bangkokPeriod("2026-10-13", "2026-10-14")).toEqual({
+      start: new Date("2026-10-12T17:00:00.000Z"),
+      end: new Date("2026-10-14T17:00:00.000Z"),
+    });
   });
 });

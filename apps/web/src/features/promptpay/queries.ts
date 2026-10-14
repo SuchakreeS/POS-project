@@ -1,5 +1,6 @@
 import type { PromptPayBill, PromptPayBoard, PromptPaySummary } from "@pos/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { orderKeys } from "@/features/orders/order-keys";
 import { api } from "@/lib/api";
 
 export const promptpayKeys = {
@@ -27,9 +28,14 @@ export function usePromptPayPendingCount(): number | undefined {
   return data?.pendingCount;
 }
 
+/** The check page, the sidebar badge and bills (their Pending / Received badge). */
 function useRefreshPromptPay() {
   const queryClient = useQueryClient();
-  return () => queryClient.invalidateQueries({ queryKey: promptpayKeys.all });
+  return () =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: promptpayKeys.all }),
+      queryClient.invalidateQueries({ queryKey: orderKeys.all }),
+    ]);
 }
 
 export function useMarkReceived() {

@@ -1,4 +1,4 @@
-import type { Order } from "@pos/shared";
+import type { Order, OrderSummary } from "@pos/shared";
 import type { Prisma } from "../../generated/prisma/client";
 
 export const orderInclude = {
@@ -6,6 +6,7 @@ export const orderInclude = {
   terminal: { select: { code: true } },
   cashier: { select: { displayName: true } },
   promptpayReceivedBy: { select: { displayName: true } },
+  voidedBy: { select: { displayName: true } },
   creditEntries: {
     where: { type: "CHARGE" },
     select: { customer: { select: { id: true, name: true } } },
@@ -43,6 +44,46 @@ export function toOrder(row: OrderRow): Order {
         }
       : null,
     customer: row.creditEntries[0]?.customer ?? null,
+    voided:
+      row.status === "VOIDED" && row.voidedAt
+        ? {
+            at: row.voidedAt.toISOString(),
+            by: row.voidedBy?.displayName ?? "",
+            reason: row.voidReason ?? "",
+            note: row.voidNote,
+          }
+        : null,
+    createdAt: row.createdAt.toISOString(),
+  };
+}
+
+// ---------- Orders table ----------
+
+export const orderSummarySelect = {
+  id: true,
+  billNo: true,
+  status: true,
+  paymentMethod: true,
+  promptpayStatus: true,
+  total: true,
+  createdAt: true,
+  items: { select: { qty: true } },
+  creditEntries: { where: { type: "CHARGE" }, select: { customer: { select: { name: true } } } },
+} as const satisfies Prisma.OrderSelect;
+
+type OrderSummaryRow = Prisma.OrderGetPayload<{ select: typeof orderSummarySelect }>;
+
+export function toOrderSummary(row: OrderSummaryRow): OrderSummary {
+  return {
+    id: row.id,
+    billNo: row.billNo,
+    status: row.status,
+    paymentMethod: row.paymentMethod,
+    promptpayStatus: row.promptpayStatus,
+    customerName: row.creditEntries[0]?.customer.name ?? null,
+    lineCount: row.items.length,
+    pieceCount: row.items.reduce((sum, item) => sum + item.qty, 0),
+    total: row.total,
     createdAt: row.createdAt.toISOString(),
   };
 }

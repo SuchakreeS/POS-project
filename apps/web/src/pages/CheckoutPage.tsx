@@ -22,6 +22,8 @@ import { useCartStore } from "@/features/checkout/cart-store";
 import { CartPanel } from "@/features/checkout/components/CartPanel";
 import { PaymentDialog } from "@/features/checkout/components/PaymentDialog";
 import { useTerminal } from "@/features/checkout/terminal";
+import { useBillViewer } from "@/features/orders/bill-viewer";
+import { BillViewer } from "@/features/orders/components/BillViewer";
 import { useShopSettings } from "@/features/settings/queries";
 
 type Overlay =
@@ -89,7 +91,8 @@ export function CheckoutPage() {
 
   // ---------- Keyboard ----------
   const onKeyDown = useEffectEvent((event: KeyboardEvent) => {
-    if (overlay !== null) return; // dialogs handle their own keys
+    // Dialogs handle their own keys (a bill opened from "View bill" counts too).
+    if (overlay !== null || useBillViewer.getState().orderId !== null) return;
     const typing = isTextField(event.target);
 
     if (event.key === "F2") {
@@ -292,6 +295,7 @@ export function CheckoutPage() {
           backToScanning();
         }}
       />
+      <BillViewer />
     </div>
   );
 }

@@ -1,21 +1,17 @@
-import { formatTHB, type CheckoutResponse, type PaymentMethod } from "@pos/shared";
+import { formatTHB, PAYMENT_METHOD_LABELS, type CheckoutResponse } from "@pos/shared";
 import { IconCircleCheckFilled, IconClockHour4 } from "@tabler/icons-react";
-import { useEffect, useEffectEvent, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { Kbd } from "@/components/ui/Kbd";
+import { LinkButton } from "@/components/ui/LinkButton";
 import { ResultBox } from "@/components/ui/ResultBox";
+import { openBill } from "@/features/orders/bill-viewer";
 
 const AUTO_CLOSE_SECONDS = 5;
 /** Keys from a barcode scanner arrive within a few ms; a person types much slower. */
 const SCAN_IDLE_MS = 60;
-
-const METHOD_LABELS: Record<PaymentMethod, string> = {
-  CASH: "Cash",
-  PROMPTPAY: "PromptPay",
-  CREDIT: "Credit",
-};
 
 /**
  * Success state (plan.md → Payment dialog → Success). New sale on Enter, Esc, any key, the
@@ -30,6 +26,7 @@ export function SaleDone({
 }) {
   const { order, customerBalance } = result;
   const [secondsLeft, setSecondsLeft] = useState(AUTO_CLOSE_SECONDS);
+  const viewBill = useRef<HTMLButtonElement>(null);
   const finish = useEffectEvent((scanned?: string) => onNewSale(scanned));
 
   useEffect(() => {
@@ -45,6 +42,8 @@ export function SaleDone({
     let buffer = "";
     let idle: ReturnType<typeof setTimeout> | undefined;
     const onKey = (event: KeyboardEvent) => {
+      // "View bill" handles its own Enter / Space when it has focus (Tab to reach it).
+      if (event.target === viewBill.current && (event.key === "Enter" || event.key === " ")) return;
       if (
         event.key === "Tab" ||
         event.key === "Shift" ||
@@ -79,7 +78,16 @@ export function SaleDone({
       onClose={() => onNewSale()}
       footer={
         <>
-          <span className="mr-auto text-sm text-text-muted">
+          <span className="mr-auto flex items-center gap-4 text-sm text-text-muted">
+            <LinkButton
+              ref={viewBill}
+              onClick={() => {
+                onNewSale();
+                openBill(order.id);
+              }}
+            >
+              View bill
+            </LinkButton>
             Closes in {Math.max(secondsLeft, 0)} s
           </span>
           <Button
@@ -110,7 +118,8 @@ export function SaleDone({
                 : "Sale completed"}
           </p>
           <p className="text-text-muted">
-            Bill {order.billNo} · {METHOD_LABELS[order.paymentMethod]} · {formatTHB(order.total)}
+            Bill {order.billNo} · {PAYMENT_METHOD_LABELS[order.paymentMethod]} ·{" "}
+            {formatTHB(order.total)}
           </p>
         </div>
 

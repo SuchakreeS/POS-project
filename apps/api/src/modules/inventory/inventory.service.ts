@@ -12,6 +12,7 @@ import {
 import type { z } from "zod";
 import { writeAudit } from "../../audit/audit";
 import { Prisma } from "../../generated/prisma/client";
+import { decodeCursor, encodeCursor } from "../../lib/cursor";
 import { HttpError } from "../../lib/http-error";
 import { prisma } from "../../lib/prisma";
 import type { RequestContext } from "../../lib/request-context";
@@ -151,18 +152,6 @@ interface MovementRow {
   userName: string;
   orderId: string | null;
   billNo: string | null;
-}
-
-/** Cursor = position of the last row shown (time + id, so equal times still sort the same way). */
-function encodeCursor(row: Pick<MovementRow, "createdAt" | "id">) {
-  return Buffer.from(`${row.createdAt.toISOString()}|${row.id}`).toString("base64url");
-}
-
-function decodeCursor(cursor: string): { createdAt: Date; id: string } {
-  const [time, id] = Buffer.from(cursor, "base64url").toString().split("|");
-  const createdAt = new Date(time ?? "");
-  if (!id || Number.isNaN(createdAt.getTime())) throw HttpError.badRequest("Invalid cursor");
-  return { createdAt, id };
 }
 
 /**

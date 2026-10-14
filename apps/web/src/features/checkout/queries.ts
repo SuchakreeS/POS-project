@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { catalogKeys } from "@/features/catalog/queries";
 import { creditKeys } from "@/features/credit/queries";
 import { inventoryKeys } from "@/features/inventory/queries";
+import { orderKeys } from "@/features/orders/order-keys";
 import { promptpayKeys } from "@/features/promptpay/queries";
 import { api } from "@/lib/api";
 
@@ -25,6 +26,7 @@ export function useCheckout() {
       void queryClient.invalidateQueries({ queryKey: inventoryKeys.allMovements });
       void queryClient.invalidateQueries({ queryKey: promptpayKeys.all }); // pending badge
       void queryClient.invalidateQueries({ queryKey: creditKeys.all }); // balances
+      void queryClient.invalidateQueries({ queryKey: orderKeys.all }); // Orders page
     },
   });
 }

@@ -8,7 +8,13 @@ import request from "supertest";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../../app";
 import { prisma } from "../../lib/prisma";
-import { createTestUser, dbTestsEnabled, deleteTestUsers } from "../../test/db-helpers";
+import {
+  createTestUser,
+  dbTestsEnabled,
+  deleteTerminalOrders,
+  deleteTestCustomers,
+  deleteTestUsers,
+} from "../../test/db-helpers";
 
 const app = createApp();
 const USER_PREFIX = "itestcr_";
@@ -17,19 +23,8 @@ let terminalId: string;
 let productId: string;
 
 async function cleanup() {
-  const customers = await prisma.customer.findMany({ where: { nameKey: { startsWith: "itcr " } } });
-  const customerIds = customers.map((c) => c.id);
-  const entries = await prisma.creditEntry.findMany({ where: { customerId: { in: customerIds } } });
-  const orders = await prisma.order.findMany({ where: { terminalId } });
-  const orderIds = orders.map((o) => o.id);
-  await prisma.auditLog.deleteMany({
-    where: { entityId: { in: [...customerIds, ...entries.map((e) => e.id), ...orderIds] } },
-  });
-  await prisma.creditEntry.deleteMany({ where: { customerId: { in: customerIds } } });
-  await prisma.stockMovement.deleteMany({ where: { orderId: { in: orderIds } } });
-  await prisma.orderItem.deleteMany({ where: { orderId: { in: orderIds } } });
-  await prisma.order.deleteMany({ where: { id: { in: orderIds } } });
-  await prisma.customer.deleteMany({ where: { id: { in: customerIds } } });
+  await deleteTerminalOrders(terminalId);
+  await deleteTestCustomers("itcr ");
 }
 
 const post = (path: string, body: object) => request(app).post(path).set(headers).send(body);

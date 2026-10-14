@@ -1,4 +1,5 @@
 import { Outlet } from "react-router";
+import { BillViewer } from "@/features/orders/components/BillViewer";
 import { Sidebar } from "./Sidebar";
 
 /** Page content on the left, fixed sidebar on the right (plan.md → App frame). */
@@ -9,6 +10,7 @@ export function AppLayout() {
         <Outlet />
       </main>
       <Sidebar />
+      <BillViewer />
     </div>
   );
 }

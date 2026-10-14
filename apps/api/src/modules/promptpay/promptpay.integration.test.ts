@@ -8,7 +8,12 @@ import request from "supertest";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../../app";
 import { prisma } from "../../lib/prisma";
-import { createTestUser, dbTestsEnabled, deleteTestUsers } from "../../test/db-helpers";
+import {
+  createTestUser,
+  dbTestsEnabled,
+  deleteTerminalOrders,
+  deleteTestUsers,
+} from "../../test/db-helpers";
 
 const app = createApp();
 const USER_PREFIX = "itestpp_";
@@ -16,14 +21,7 @@ let headers: Record<string, string>;
 let terminalId: string;
 let productId: string;
 
-async function cleanup() {
-  const orders = await prisma.order.findMany({ where: { terminalId } });
-  const ids = orders.map((o) => o.id);
-  await prisma.auditLog.deleteMany({ where: { entityId: { in: ids } } });
-  await prisma.stockMovement.deleteMany({ where: { orderId: { in: ids } } });
-  await prisma.orderItem.deleteMany({ where: { orderId: { in: ids } } });
-  await prisma.order.deleteMany({ where: { id: { in: ids } } });
-}
+const cleanup = () => deleteTerminalOrders(terminalId);
 
 const post = (path: string, body: object) => request(app).post(path).set(headers).send(body);
 const board = async (): Promise<PromptPayBoard> =>

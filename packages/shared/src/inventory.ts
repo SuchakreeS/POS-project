@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { MAX_STOCK_QTY } from "./catalog";
+import { noteSchema } from "./fields";
 
 /*
  * Restock, Adjust stock and Movement history (plan.md → Restock modal, Adjust stock dialog,
@@ -8,18 +9,12 @@ import { MAX_STOCK_QTY } from "./catalog";
 
 /** Most products in one restock. */
 export const MAX_RESTOCK_ROWS = 200;
-export const NOTE_MAX = 200;
 
 const qtySchema = z
   .number({ error: "Enter a quantity" })
   .int("Quantity must be a whole number")
   .min(1, "Quantity must be at least 1")
   .max(MAX_STOCK_QTY, "Quantity is too large");
-
-const noteSchema = z.preprocess(
-  (value) => (typeof value === "string" && value.trim() === "" ? null : value),
-  z.string().trim().max(NOTE_MAX, "Note is too long").nullable().default(null),
-);
 
 // ---------- Restock ----------
 

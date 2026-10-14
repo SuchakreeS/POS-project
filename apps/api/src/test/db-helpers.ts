@@ -32,3 +32,36 @@ export async function deleteTestUsers(prefix: string) {
   await prisma.auditLog.deleteMany({ where: { userId: { in: ids } } });
   await prisma.user.deleteMany({ where: { id: { in: ids } } });
 }
+
+/** Every bill made on a test terminal: items, stock movements, credit entries and their audit rows. */
+export async function deleteTerminalOrders(terminalId: string) {
+  const orders = await prisma.order.findMany({ where: { terminalId }, select: { id: true } });
+  const orderIds = orders.map((o) => o.id);
+  const entries = await prisma.creditEntry.findMany({
+    where: { orderId: { in: orderIds } },
+    select: { id: true },
+  });
+  const entryIds = entries.map((e) => e.id);
+  await prisma.auditLog.deleteMany({ where: { entityId: { in: [...orderIds, ...entryIds] } } });
+  await prisma.creditEntry.deleteMany({ where: { id: { in: entryIds } } });
+  await prisma.stockMovement.deleteMany({ where: { orderId: { in: orderIds } } });
+  await prisma.orderItem.deleteMany({ where: { orderId: { in: orderIds } } });
+  await prisma.order.deleteMany({ where: { id: { in: orderIds } } });
+}
+
+/** Customers whose name starts with `prefix`, with their remaining credit entries and audit rows. */
+export async function deleteTestCustomers(prefix: string) {
+  const customers = await prisma.customer.findMany({
+    where: { nameKey: { startsWith: prefix } },
+    select: { id: true },
+  });
+  const customerIds = customers.map((c) => c.id);
+  const entries = await prisma.creditEntry.findMany({
+    where: { customerId: { in: customerIds } },
+    select: { id: true },
+  });
+  const entryIds = entries.map((e) => e.id);
+  await prisma.auditLog.deleteMany({ where: { entityId: { in: [...customerIds, ...entryIds] } } });
+  await prisma.creditEntry.deleteMany({ where: { id: { in: entryIds } } });
+  await prisma.customer.deleteMany({ where: { id: { in: customerIds } } });
+}

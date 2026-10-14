@@ -50,7 +50,11 @@ export const router = createBrowserRouter([
                     lazy: () =>
                       import("@/pages/CreditPage").then((m) => ({ Component: m.CreditPage })),
                   },
-                  { path: "orders", element: <ComingSoonPage title="Orders" step={9} /> },
+                  {
+                    path: "orders",
+                    lazy: () =>
+                      import("@/pages/OrdersPage").then((m) => ({ Component: m.OrdersPage })),
+                  },
                   { path: "reports", element: <ComingSoonPage title="Reports" step={11} /> },
                   {
                     path: "users",

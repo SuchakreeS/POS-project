@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 /*
  * Shop days run on Bangkok time (plan.md → Reports), while servers run in UTC.
  * Thailand has no daylight saving time, so Bangkok is always UTC+7 and a fixed offset is exact.
@@ -36,4 +38,21 @@ export function bangkokDayRange(day: DateKey): { start: Date; end: Date } {
 export function addDays(day: DateKey, days: number): DateKey {
   const { start } = bangkokDayRange(day);
   return bangkokDateKey(new Date(start.getTime() + days * DAY_MS));
+}
+
+/** Is this a real "YYYY-MM-DD" day? */
+export function isDateKey(value: string): boolean {
+  try {
+    bangkokDayRange(value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export const dateKeySchema = z.string().refine(isDateKey, "Pick a valid date");
+
+/** The UTC instants from the start of `from` to the end of `to` (both Bangkok days, inclusive). */
+export function bangkokPeriod(from: DateKey, to: DateKey): { start: Date; end: Date } {
+  return { start: bangkokDayRange(from).start, end: bangkokDayRange(to).end };
 }

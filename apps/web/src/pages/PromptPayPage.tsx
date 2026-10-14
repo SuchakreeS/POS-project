@@ -12,6 +12,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { StatCard } from "@/components/ui/StatCard";
 import { toast } from "@/components/ui/toast";
+import { BillLink } from "@/features/orders/components/BillLink";
 import { UndoReceivedDialog } from "@/features/promptpay/components/UndoReceivedDialog";
 import { billsFor, selectionOf, type PromptPayView } from "@/features/promptpay/promptpay-view";
 import { useMarkReceived, usePromptPayBoard } from "@/features/promptpay/queries";
@@ -274,7 +275,10 @@ function BillRow({
         )}
       </td>
       <td className="px-3 text-text-muted">{formatTime(bill.createdAt)}</td>
-      <td className="px-3 font-medium">{bill.billNo}</td>
+      <td className="px-3">
+        {/* Unpaid after checking the bank app? Open the bill and void it. */}
+        <BillLink order={{ id: bill.orderId, billNo: bill.billNo }} prefix="" />
+      </td>
       <td className="px-3 text-right">
         <span className="inline-flex items-center gap-2">
           {sameAmount && pending && (

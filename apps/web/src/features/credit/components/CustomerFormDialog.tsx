@@ -1,6 +1,6 @@
 import {
   CUSTOMER_NAME_MAX,
-  CUSTOMER_NOTE_MAX,
+  NOTE_MAX,
   customerInputSchema,
   PHONE_MAX,
   type CustomerSummary,
@@ -141,7 +141,7 @@ function CustomerForm({
           {...field("note")}
           label="Note (optional)"
           autoComplete="off"
-          maxLength={CUSTOMER_NOTE_MAX}
+          maxLength={NOTE_MAX}
           placeholder="e.g. Pays on Fridays"
         />
         {generalError && <Alert tone="danger">{generalError}</Alert>}

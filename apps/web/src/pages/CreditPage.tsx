@@ -1,6 +1,7 @@
 import { formatSatang, formatTHB, type CustomerOverview } from "@pos/shared";
 import { IconCircleCheck, IconPlus, IconRefresh, IconUsers } from "@tabler/icons-react";
 import { useState } from "react";
+import { useSearchParams } from "react-router";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Alert } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
@@ -43,6 +44,15 @@ export function CreditPage() {
     sort: "highest",
   });
   const [dialog, setDialog] = useState<CreditDialog>(null);
+  // A link from a bill (/credit?customer=…) opens that customer's history.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const linked = searchParams.get("customer");
+  const shown: CreditDialog =
+    dialog ?? (linked ? { kind: "customer", id: linked, step: "history" } : null);
+  const closeDialog = () => {
+    setDialog(null);
+    if (linked) setSearchParams({}, { replace: true });
+  };
 
   const update = (change: Partial<CreditFilter>) =>
     setFilter((current) => ({ ...current, ...change }));
@@ -68,15 +78,15 @@ export function CreditPage() {
   const dialogs = (
     <>
       <CustomerFormDialog
-        open={dialog?.kind === "add"}
-        onClose={() => setDialog(null)}
+        open={shown?.kind === "add"}
+        onClose={closeDialog}
         // A new customer owes nothing yet: show them under "All" so the cashier sees they're in.
         onSaved={(customer) => update({ view: "all", search: customer.name })}
       />
       <CustomerCreditDialog
-        customerId={dialog?.kind === "customer" ? dialog.id : null}
-        initialStep={dialog?.kind === "customer" ? dialog.step : undefined}
-        onClose={() => setDialog(null)}
+        customerId={shown?.kind === "customer" ? shown.id : null}
+        initialStep={shown?.kind === "customer" ? shown.step : undefined}
+        onClose={closeDialog}
       />
     </>
   );

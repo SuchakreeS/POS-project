@@ -2,6 +2,7 @@ export * from "./api";
 export * from "./auth";
 export * from "./catalog";
 export * from "./credit";
+export * from "./fields";
 export * from "./inventory";
 export * from "./money";
 export * from "./orders";

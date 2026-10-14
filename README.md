@@ -103,7 +103,8 @@ stop the tunnel (Ctrl+C) when you're done.
 | `pnpm test`                  | Vitest (all packages)                                          |
 | `pnpm build`                 | Production build of all packages                               |
 | `pnpm db:migrate --name <x>` | After changing `schema.prisma`: create + apply a new migration |
-| `pnpm db:deploy`             | Apply existing migrations (staging / production)               |
+| `pnpm db:deploy`             | Apply migrations that already exist (new pull, staging, prod)  |
+| `pnpm db:generate`           | Rebuild the Prisma client after the schema changed             |
 | `pnpm db:seed`               | Seed data                                                      |
 | `pnpm db:studio`             | Browse the database in Prisma Studio                           |
 | `pnpm user:create`           | Add a user (e.g. a cashier) from the terminal                  |
@@ -112,9 +113,12 @@ stop the tunnel (Ctrl+C) when you're done.
 `db:init` and `db:migrate` add **row level security** to every new table automatically, so
 Supabase's public Data API can't read the data — only our API can.
 
+When a pull brings a new folder in `apps/api/prisma/migrations/`, run `pnpm db:deploy` then
+`pnpm db:generate` (and the same `migrate deploy` for `pos_test`, see below).
+
 ### Database integration tests (optional)
 
-The auth tests that hit a real database are skipped unless `TEST_DATABASE_URL` is set. Point it at a
+The API tests that hit a real database (`*.integration.test.ts`) are skipped unless `TEST_DATABASE_URL` is set. Point it at a
 **separate** database that has the migrations applied (never your real data):
 
 ```bash

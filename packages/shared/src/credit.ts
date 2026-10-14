@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { noteSchema, optionalText } from "./fields";
 
 /*
  * Credit (เงินเชื่อ) customers (plan.md → Business rules → Credit).
@@ -41,13 +42,6 @@ export type CustomerSearch = z.input<typeof customerSearchSchema>;
 // ---------- Customers (Credit page) ----------
 
 export const PHONE_MAX = 20;
-export const CUSTOMER_NOTE_MAX = 200;
-
-const optionalText = (schema: z.ZodType<string>) =>
-  z.preprocess(
-    (value) => (typeof value === "string" && value.trim() === "" ? null : value),
-    schema.nullable().default(null),
-  );
 
 /** "+ Add customer" and Edit (plan.md → Credit page). */
 export const customerInputSchema = z.object({
@@ -59,7 +53,7 @@ export const customerInputSchema = z.object({
       .max(PHONE_MAX, "Phone number is too long")
       .regex(/^[0-9+\-\s()]+$/, "Use only numbers, spaces, + or -"),
   ),
-  note: optionalText(z.string().trim().max(CUSTOMER_NOTE_MAX, "Note is too long")),
+  note: noteSchema,
 });
 export type CustomerInput = z.input<typeof customerInputSchema>;
 
@@ -74,7 +68,7 @@ export const repaymentInputSchema = z.object({
     .int("Amount must be whole satang")
     .min(1, "Enter the amount paid"),
   method: z.enum(REPAYMENT_METHODS, { error: "Pick how they paid" }),
-  note: optionalText(z.string().trim().max(CUSTOMER_NOTE_MAX, "Note is too long")),
+  note: noteSchema,
 });
 export type RepaymentInput = z.input<typeof repaymentInputSchema>;
 

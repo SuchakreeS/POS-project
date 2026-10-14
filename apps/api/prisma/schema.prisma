@@ -213,7 +213,8 @@ model Order {
 
   note String?
 
-  voidReason String?
+  voidReason String? // one of the reason chips (VOID_REASONS)
+  voidNote   String? // optional note; required by the API for "Other"
   voidedById String?
   voidedBy   User?     @relation("OrderVoidedBy", fields: [voidedById], references: [id])
   voidedAt   DateTime?

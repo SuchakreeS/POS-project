@@ -8,7 +8,13 @@ import request from "supertest";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../../app";
 import { prisma } from "../../lib/prisma";
-import { createTestUser, dbTestsEnabled, deleteTestUsers } from "../../test/db-helpers";
+import {
+  createTestUser,
+  dbTestsEnabled,
+  deleteTerminalOrders,
+  deleteTestCustomers,
+  deleteTestUsers,
+} from "../../test/db-helpers";
 
 const app = createApp();
 const USER_PREFIX = "itestord_";
@@ -16,37 +22,15 @@ let headers: Record<string, string>;
 let terminalId: string;
 
 async function cleanup() {
-  // Rows created through this terminal, its products, and customers named "itest …"
   const terminal = await prisma.terminal.findUnique({ where: { code: "ITX" } });
-  const orders = terminal
-    ? await prisma.order.findMany({ where: { terminalId: terminal.id } })
-    : [];
-  const orderIds = orders.map((o) => o.id);
+  if (terminal) await deleteTerminalOrders(terminal.id);
+  await deleteTestCustomers("itest ");
+  // Products made by these tests, with their opening-stock movements and audit rows.
   const products = await prisma.product.findMany({ where: { barcode: { startsWith: "ITORD-" } } });
   const productIds = products.map((p) => p.id);
-
-  const entries = await prisma.creditEntry.findMany({ where: { orderId: { in: orderIds } } });
-  const customers = await prisma.customer.findMany({
-    where: { nameKey: { startsWith: "itest " } },
-  });
-  await prisma.auditLog.deleteMany({
-    where: {
-      entityId: {
-        in: [
-          ...orderIds,
-          ...productIds,
-          ...entries.map((e) => e.id),
-          ...customers.map((c) => c.id),
-        ],
-      },
-    },
-  });
-  await prisma.creditEntry.deleteMany({ where: { id: { in: entries.map((e) => e.id) } } });
+  await prisma.auditLog.deleteMany({ where: { entityId: { in: productIds } } });
   await prisma.stockMovement.deleteMany({ where: { productId: { in: productIds } } });
-  await prisma.orderItem.deleteMany({ where: { orderId: { in: orderIds } } });
-  await prisma.order.deleteMany({ where: { id: { in: orderIds } } });
   await prisma.product.deleteMany({ where: { id: { in: productIds } } });
-  await prisma.customer.deleteMany({ where: { id: { in: customers.map((c) => c.id) } } });
   if (terminal)
     await prisma.terminal.update({ where: { id: terminal.id }, data: { lastBillSeq: 0 } });
 }

@@ -10,6 +10,7 @@ import { Dialog } from "@/components/ui/Dialog";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { useProduct } from "@/features/catalog/queries";
+import { BillLink } from "@/features/orders/components/BillLink";
 import { formatDayLabel, formatTime, groupByDay } from "@/lib/datetime";
 import { errorMessage } from "@/lib/errors";
 import { useMovements } from "../queries";
@@ -186,7 +187,7 @@ function MovementRow({ movement }: { movement: Movement }) {
         {movement.userName}
       </td>
       <td className="truncate px-2 text-text-muted" title={details(movement)}>
-        {details(movement)}
+        {movement.order ? <BillLink order={movement.order} /> : details(movement)}
       </td>
     </tr>
   );
