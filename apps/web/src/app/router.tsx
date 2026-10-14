@@ -45,7 +45,11 @@ export const router = createBrowserRouter([
                     lazy: () =>
                       import("@/pages/PromptPayPage").then((m) => ({ Component: m.PromptPayPage })),
                   },
-                  { path: "credit", element: <ComingSoonPage title="Credit" step={8} /> },
+                  {
+                    path: "credit",
+                    lazy: () =>
+                      import("@/pages/CreditPage").then((m) => ({ Component: m.CreditPage })),
+                  },
                   { path: "orders", element: <ComingSoonPage title="Orders" step={9} /> },
                   { path: "reports", element: <ComingSoonPage title="Reports" step={11} /> },
                   {

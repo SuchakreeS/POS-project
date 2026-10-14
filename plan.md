@@ -378,9 +378,12 @@ PromptPay
   POST   /promptpay/:orderId/undo        (reason required)
 
 Credit
+  GET    /credit                          (every customer with balance + oldest unpaid, stat cards)
   GET    /credit/customers?search=&limit= (with balances; checkout autocomplete uses it too)
-  GET    /credit/customers/:id            (history)
-  POST   /credit/repayments
+  GET    /credit/customers/:id            (history with running balance)
+  POST   /credit/customers                (add customer)
+  PATCH  /credit/customers/:id            (edit name / phone / note)
+  POST   /credit/repayments               (customerId, amount, method CASH | PROMPTPAY, note)
 
 Reports
   GET    /reports/summary?from=&to=       (manual, live)
@@ -901,7 +904,9 @@ Use the same token names for Figma color variables so design and code match.
 - [x] **7. PromptPay + credit payment**: PromptPay as pending at checkout, PromptPay check page (mark received / undo), credit charge at checkout
   - [x] API: checkout takes `PROMPTPAY` (saved PENDING, no cash) and `CREDIT` (existing customer by id, or a new name — reused if the name matches ignoring case/spaces; CHARGE entry; CUSTOMER_CREATE + CREDIT_CHARGE with balance before → after; refused when the total is 0). `POST /orders` now returns `{ order, customerBalance }`. PromptPay board / summary / receive (bulk, one PROMPTPAY_RECEIVED per bill) / undo (reason, PROMPTPAY_RECEIVED_UNDO). Voided bills drop off the list. DB integration tests.
   - [x] Web: payment dialog has all three methods (Complete sale / Save as pending / Add to credit), customer autocomplete with what each person owes + "New customer", "will owe 22.00 → 207.00 ฿", success states for each method. PromptPay page: stat cards, Pending / Received today / All, grouped by day, "Same amount" tag (same amount within 30 min), select + bulk bar, Mark received, undo with reason. Amber pending count on the sidebar (refreshes every minute).
-- [ ] **8. Credit page**: balances, history, repayments
+- [x] **8. Credit page**: balances, history, repayments
+  - [x] API: `GET /credit` (every customer with balance + oldest unpaid date, stat cards), `GET /credit/customers/:id` (history newest first with running balance, first charge, credit bill count), add / edit customer (name unique ignoring case/spaces, optional phone + note, CUSTOMER_CREATE / CUSTOMER_UPDATE with only changed fields), `POST /credit/repayments` (customer row locked so two payments at once can't overpay; refused above what they owe; CREDIT_REPAYMENT with balance before → after). Oldest unpaid uses first-in-first-out (payments clear the oldest charges first; a voided charge cancels its own sale). DB integration tests.
+  - [x] Web: Credit page (Total owed / Collected today cards, search name or phone, Owes money / All chips with counts, Highest first / Oldest debt sort, amber badge from 30 days, Record payment per row, whole row opens the customer). Customer dialog: owes-now box, history (Date · What · Amount · Balance, bill number under each sale), phone, edit pencil. Record payment: Full / 100 / 200 / 300 / 500 chips (only up to what they owe), Cash / PromptPay required, "will owe 200.00 → 150.00 ฿", optional note. Add customer switches to All and shows them.
 - [ ] **9. Orders + void**: history, filters, void transaction
 - [ ] **10. Users + Settings (Admin)**: users list, add / edit / reset password / turn off, shop settings (report time is read by step 11)
 - [ ] **11. Reports**: manual summary, saved daily snapshot, LINE push, scheduled trigger (decide Render sleep option)
